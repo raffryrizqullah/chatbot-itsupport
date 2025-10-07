@@ -1,0 +1,32 @@
+# FastAPI
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Pydantic
+pydantic
+pydantic-settings
+
+# LangChain
+langchain
+langchain-openai
+langchain-pinecone
+langchain-community
+
+# Document Processing
+unstructured[all-docs]
+pillow
+lxml
+python-magic
+pdf2image
+pytesseract
+
+# Vector Database
+pinecone-client
+
+# Redis (Persistent Docstore)
+redis
+hiredis
+
+# Environment & Utils
+python-dotenv
