@@ -23,9 +23,20 @@ class UploadResponse(BaseModel):
 
     document_id: str = Field(..., description="Unique identifier for the uploaded document")
     filename: str = Field(..., description="Name of the uploaded file")
+    source_link: Optional[str] = Field(default=None, description="Source link provided by user")
     status: str = Field(..., description="Processing status")
     metadata: Dict[str, Any] = Field(..., description="Document metadata and statistics")
     message: str = Field(..., description="Status message")
+
+
+class BatchUploadResponse(BaseModel):
+    """Response schema for batch document upload."""
+
+    total_uploaded: int = Field(..., description="Total number of documents uploaded")
+    successful: int = Field(..., description="Number of successfully processed documents")
+    failed: int = Field(..., description="Number of failed documents")
+    results: List[UploadResponse] = Field(..., description="Individual upload results")
+    message: str = Field(..., description="Overall status message")
 
 
 class QueryRequest(BaseModel):

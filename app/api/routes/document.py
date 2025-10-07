@@ -4,8 +4,9 @@ Document upload and management endpoints.
 Handles PDF document uploads, processing, and metadata retrieval.
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
-from app.models.schemas import UploadResponse, ErrorResponse
+from typing import List, Union, Optional
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
+from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse
 from app.services.pdf_processor import PDFProcessor
 from app.services.summarizer import SummarizerService
 from app.services.vectorstore import VectorStoreService
@@ -50,7 +51,7 @@ def get_vectorstore() -> VectorStoreService:
 
 @router.post(
     "/documents/upload",
-    response_model=UploadResponse,
+    response_model=Union[UploadResponse, BatchUploadResponse],
     status_code=status.HTTP_201_CREATED,
     tags=["documents"],
     responses={
@@ -58,98 +59,154 @@ def get_vectorstore() -> VectorStoreService:
         500: {"model": ErrorResponse},
     },
 )
-async def upload_document(file: UploadFile = File(...)) -> UploadResponse:
+async def upload_document(
+    files: List[UploadFile] = File(...),
+    source_links: Optional[List[str]] = Form(None)
+) -> Union[UploadResponse, BatchUploadResponse]:
     """
-    Upload and process a PDF document.
+    Upload and process one or more PDF documents.
 
-    Extracts text, tables, and images from the PDF, generates summaries,
+    Extracts text, tables, and images from PDFs, generates summaries,
     and stores them in the vector database for retrieval.
 
     Args:
-        file: PDF file to upload and process.
+        files: One or more PDF files to upload and process.
+        source_links: Optional source links for each file (must match number of files).
 
     Returns:
-        UploadResponse with document ID and processing metadata.
+        UploadResponse for single file or BatchUploadResponse for multiple files.
 
     Raises:
         HTTPException: If file validation or processing fails.
     """
-    # Validate file type
-    if not file.filename.endswith(".pdf"):
+    # Validate source_links count matches files count
+    if source_links is not None and len(source_links) != len(files):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only PDF files are supported",
+            detail=f"Number of source_links ({len(source_links)}) must match number of files ({len(files)})",
         )
 
-    # Generate unique document ID
-    document_id = str(uuid.uuid4())
+    # Get service instances
+    pdf_processor = get_pdf_processor()
+    summarizer = get_summarizer()
+    vectorstore = get_vectorstore()
 
-    try:
-        # Save uploaded file
-        file_path = os.path.join(settings.pdf_upload_dir, f"{document_id}.pdf")
-        os.makedirs(settings.pdf_upload_dir, exist_ok=True)
+    results = []
+    successful = 0
+    failed = 0
 
-        with open(file_path, "wb") as f:
-            content = await file.read()
+    # Process each file
+    for idx, file in enumerate(files):
+        source_link = source_links[idx] if source_links else None
 
-            # Check file size
-            if len(content) > settings.pdf_max_file_size:
+        try:
+            # Validate file type
+            if not file.filename.endswith(".pdf"):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"File size exceeds maximum allowed size of {settings.pdf_max_file_size} bytes",
+                    detail=f"File {file.filename}: Only PDF files are supported",
                 )
 
-            f.write(content)
+            # Generate unique document ID
+            document_id = str(uuid.uuid4())
 
-        logger.info(f"Saved uploaded file: {file_path}")
+            # Save uploaded file
+            file_path = os.path.join(settings.pdf_upload_dir, f"{document_id}.pdf")
+            os.makedirs(settings.pdf_upload_dir, exist_ok=True)
 
-        # Get service instances
-        pdf_processor = get_pdf_processor()
-        summarizer = get_summarizer()
-        vectorstore = get_vectorstore()
+            with open(file_path, "wb") as f:
+                content = await file.read()
 
-        # Process PDF
-        extracted_content = pdf_processor.process_pdf(file_path)
+                # Check file size
+                if len(content) > settings.pdf_max_file_size:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"File {file.filename}: File size exceeds maximum allowed size of {settings.pdf_max_file_size} bytes",
+                    )
 
-        # Generate summaries
-        text_summaries = summarizer.summarize_texts(extracted_content.texts)
-        table_summaries = summarizer.summarize_tables(extracted_content.tables)
-        image_summaries = summarizer.summarize_images(extracted_content.images)
+                f.write(content)
 
-        # Add to vector store
-        counts = vectorstore.add_documents(
-            text_chunks=extracted_content.texts,
-            text_summaries=text_summaries,
-            tables=extracted_content.tables,
-            table_summaries=table_summaries,
-            images=extracted_content.images,
-            image_summaries=image_summaries,
-            document_id=document_id,
-        )
+            logger.info(f"Saved uploaded file: {file_path}")
 
-        logger.info(f"Document {document_id} processed successfully")
+            # Process PDF
+            extracted_content = pdf_processor.process_pdf(file_path)
 
-        return UploadResponse(
-            document_id=document_id,
-            filename=file.filename,
-            status="completed",
-            metadata={
-                "num_texts": counts["texts"],
-                "num_tables": counts["tables"],
-                "num_images": counts["images"],
-                "total_chunks": counts["total"],
-                "upload_timestamp": datetime.utcnow().isoformat(),
-            },
-            message="Document processed and indexed successfully",
-        )
+            # Generate summaries
+            text_summaries = summarizer.summarize_texts(extracted_content.texts)
+            table_summaries = summarizer.summarize_tables(extracted_content.tables)
+            image_summaries = summarizer.summarize_images(extracted_content.images)
 
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        msg = f"Failed to process document: {str(e)}"
-        logger.error(msg)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=msg,
+            # Add to vector store with source_link
+            counts = vectorstore.add_documents(
+                text_chunks=extracted_content.texts,
+                text_summaries=text_summaries,
+                tables=extracted_content.tables,
+                table_summaries=table_summaries,
+                images=extracted_content.images,
+                image_summaries=image_summaries,
+                document_id=document_id,
+                source_link=source_link,
+            )
+
+            logger.info(f"Document {document_id} processed successfully")
+
+            # Create success response
+            result = UploadResponse(
+                document_id=document_id,
+                filename=file.filename,
+                source_link=source_link,
+                status="completed",
+                metadata={
+                    "num_texts": counts["texts"],
+                    "num_tables": counts["tables"],
+                    "num_images": counts["images"],
+                    "total_chunks": counts["total"],
+                    "upload_timestamp": datetime.utcnow().isoformat(),
+                },
+                message="Document processed and indexed successfully",
+            )
+            results.append(result)
+            successful += 1
+
+        except HTTPException as e:
+            # Create error response for this file
+            result = UploadResponse(
+                document_id="",
+                filename=file.filename,
+                source_link=source_link,
+                status="failed",
+                metadata={"error": e.detail},
+                message=f"Failed to process: {e.detail}",
+            )
+            results.append(result)
+            failed += 1
+            logger.error(f"Failed to process {file.filename}: {e.detail}")
+
+        except Exception as e:
+            # Create error response for this file
+            msg = f"Failed to process document: {str(e)}"
+            result = UploadResponse(
+                document_id="",
+                filename=file.filename,
+                source_link=source_link,
+                status="failed",
+                metadata={"error": msg},
+                message=msg,
+            )
+            results.append(result)
+            failed += 1
+            logger.error(f"Failed to process {file.filename}: {msg}")
+
+    # Return single result or batch result
+    if len(files) == 1:
+        # Return single UploadResponse for backward compatibility
+        return results[0]
+    else:
+        # Return BatchUploadResponse for multiple files
+        return BatchUploadResponse(
+            total_uploaded=len(files),
+            successful=successful,
+            failed=failed,
+            results=results,
+            message=f"Processed {successful} of {len(files)} documents successfully",
         )

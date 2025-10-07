@@ -4,6 +4,7 @@ Query endpoints for RAG-based question answering.
 Handles user queries against indexed documents using retrieval-augmented generation.
 """
 
+from typing import Union
 from fastapi import APIRouter, HTTPException, status
 from app.models.schemas import (
     QueryRequest,
@@ -41,14 +42,14 @@ def get_rag_chain() -> RAGChainService:
 
 @router.post(
     "/query",
-    response_model=QueryResponse,
+    response_model=Union[QueryResponse, QueryWithSourcesResponse],
     tags=["query"],
     responses={
         400: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
-async def query_documents(request: QueryRequest) -> QueryResponse:
+async def query_documents(request: QueryRequest) -> Union[QueryResponse, QueryWithSourcesResponse]:
     """
     Query indexed documents with a question.
 

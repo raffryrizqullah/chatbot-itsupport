@@ -92,6 +92,7 @@ class VectorStoreService:
         images: List[str],
         image_summaries: List[str],
         document_id: str,
+        source_link: Optional[str] = None,
     ) -> Dict[str, int]:
         """
         Add documents and their summaries to the vector store.
@@ -104,6 +105,7 @@ class VectorStoreService:
             images: Base64-encoded images.
             image_summaries: Summaries/descriptions of images.
             document_id: Unique identifier for the source document.
+            source_link: Optional source link URL provided by user.
 
         Returns:
             Dictionary with counts of added items.
@@ -113,17 +115,17 @@ class VectorStoreService:
 
             # Add text chunks
             text_ids = self._add_content_type(
-                text_chunks, text_summaries, document_id, "text"
+                text_chunks, text_summaries, document_id, "text", source_link
             )
 
             # Add tables
             table_ids = self._add_content_type(
-                tables, table_summaries, document_id, "table"
+                tables, table_summaries, document_id, "table", source_link
             )
 
             # Add images
             image_ids = self._add_content_type(
-                images, image_summaries, document_id, "image"
+                images, image_summaries, document_id, "image", source_link
             )
 
             counts = {
@@ -147,6 +149,7 @@ class VectorStoreService:
         summaries: List[str],
         document_id: str,
         content_type: str,
+        source_link: Optional[str] = None,
     ) -> List[str]:
         """
         Add a specific content type to the vector store.
@@ -156,6 +159,7 @@ class VectorStoreService:
             summaries: Summaries of content items.
             document_id: Source document identifier.
             content_type: Type of content (``'text'``, ``'table'``, ``'image'``).
+            source_link: Optional source link URL provided by user.
 
         Returns:
             List of generated content IDs.
@@ -167,17 +171,20 @@ class VectorStoreService:
         content_ids = [str(uuid.uuid4()) for _ in content_items]
 
         # Create summary documents with metadata
-        summary_docs = [
-            Document(
-                page_content=summary,
-                metadata={
-                    self.id_key: content_ids[i],
-                    "document_id": document_id,
-                    "content_type": content_type,
-                },
+        summary_docs = []
+        for i, summary in enumerate(summaries):
+            metadata = {
+                self.id_key: content_ids[i],
+                "document_id": document_id,
+                "content_type": content_type,
+            }
+            # Add source_link to metadata if provided
+            if source_link:
+                metadata["source_link"] = source_link
+
+            summary_docs.append(
+                Document(page_content=summary, metadata=metadata)
             )
-            for i, summary in enumerate(summaries)
-        ]
 
         # Add summaries to vector store
         self.vectorstore.add_documents(summary_docs)
