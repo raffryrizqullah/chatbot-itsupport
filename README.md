@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🤖 Multi-modal RAG API
+# 🤖 Chatbot-itsupport RAG API
 
 **Production-ready FastAPI application for intelligent document processing and question answering**
 
