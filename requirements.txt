@@ -14,7 +14,7 @@ langchain-pinecone
 langchain-community
 
 # Document Processing
-unstructured[all-docs]
+unstructured[pdf]
 pillow
 lxml
 python-magic
