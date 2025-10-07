@@ -4,7 +4,7 @@ Document upload and management endpoints.
 Handles PDF document uploads, processing, and metadata retrieval.
 """
 
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
 from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse
 from app.services.pdf_processor import PDFProcessor
@@ -13,6 +13,7 @@ from app.services.vectorstore import VectorStoreService
 from app.core.config import settings
 import uuid
 import os
+import json
 import logging
 from datetime import datetime
 
@@ -61,7 +62,8 @@ def get_vectorstore() -> VectorStoreService:
 )
 async def upload_document(
     files: List[UploadFile] = File(...),
-    source_links: Optional[List[str]] = Form(None)
+    source_links: Optional[List[str]] = Form(None),
+    custom_metadata: Optional[str] = Form(None)
 ) -> Union[UploadResponse, BatchUploadResponse]:
     """
     Upload and process one or more PDF documents.
@@ -72,6 +74,7 @@ async def upload_document(
     Args:
         files: One or more PDF files to upload and process.
         source_links: Optional source links for each file (must match number of files).
+        custom_metadata: Optional custom metadata as JSON string (applies to all files).
 
     Returns:
         UploadResponse for single file or BatchUploadResponse for multiple files.
@@ -85,6 +88,31 @@ async def upload_document(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Number of source_links ({len(source_links)}) must match number of files ({len(files)})",
         )
+
+    # Parse and validate custom_metadata
+    metadata_dict: Optional[Dict[str, Any]] = None
+    if custom_metadata:
+        try:
+            metadata_dict = json.loads(custom_metadata)
+            if not isinstance(metadata_dict, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="custom_metadata must be a JSON object",
+                )
+
+            # Validate reserved keys
+            reserved_keys = {"doc_id", "document_id", "content_type", "source_link"}
+            forbidden_keys = reserved_keys.intersection(metadata_dict.keys())
+            if forbidden_keys:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot use reserved keys in custom_metadata: {forbidden_keys}",
+                )
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON in custom_metadata: {str(e)}",
+            )
 
     # Get service instances
     pdf_processor = get_pdf_processor()
@@ -136,7 +164,7 @@ async def upload_document(
             table_summaries = summarizer.summarize_tables(extracted_content.tables)
             image_summaries = summarizer.summarize_images(extracted_content.images)
 
-            # Add to vector store with source_link
+            # Add to vector store with source_link and custom_metadata
             counts = vectorstore.add_documents(
                 text_chunks=extracted_content.texts,
                 text_summaries=text_summaries,
@@ -146,6 +174,7 @@ async def upload_document(
                 image_summaries=image_summaries,
                 document_id=document_id,
                 source_link=source_link,
+                custom_metadata=metadata_dict,
             )
 
             logger.info(f"Document {document_id} processed successfully")
@@ -155,6 +184,7 @@ async def upload_document(
                 document_id=document_id,
                 filename=file.filename,
                 source_link=source_link,
+                custom_metadata=metadata_dict,
                 status="completed",
                 metadata={
                     "num_texts": counts["texts"],
@@ -174,6 +204,7 @@ async def upload_document(
                 document_id="",
                 filename=file.filename,
                 source_link=source_link,
+                custom_metadata=metadata_dict,
                 status="failed",
                 metadata={"error": e.detail},
                 message=f"Failed to process: {e.detail}",
@@ -189,6 +220,7 @@ async def upload_document(
                 document_id="",
                 filename=file.filename,
                 source_link=source_link,
+                custom_metadata=metadata_dict,
                 status="failed",
                 metadata={"error": msg},
                 message=msg,

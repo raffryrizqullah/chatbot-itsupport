@@ -93,6 +93,7 @@ class VectorStoreService:
         image_summaries: List[str],
         document_id: str,
         source_link: Optional[str] = None,
+        custom_metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, int]:
         """
         Add documents and their summaries to the vector store.
@@ -106,6 +107,7 @@ class VectorStoreService:
             image_summaries: Summaries/descriptions of images.
             document_id: Unique identifier for the source document.
             source_link: Optional source link URL provided by user.
+            custom_metadata: Optional custom metadata dict to add to all chunks.
 
         Returns:
             Dictionary with counts of added items.
@@ -115,17 +117,17 @@ class VectorStoreService:
 
             # Add text chunks
             text_ids = self._add_content_type(
-                text_chunks, text_summaries, document_id, "text", source_link
+                text_chunks, text_summaries, document_id, "text", source_link, custom_metadata
             )
 
             # Add tables
             table_ids = self._add_content_type(
-                tables, table_summaries, document_id, "table", source_link
+                tables, table_summaries, document_id, "table", source_link, custom_metadata
             )
 
             # Add images
             image_ids = self._add_content_type(
-                images, image_summaries, document_id, "image", source_link
+                images, image_summaries, document_id, "image", source_link, custom_metadata
             )
 
             counts = {
@@ -150,6 +152,7 @@ class VectorStoreService:
         document_id: str,
         content_type: str,
         source_link: Optional[str] = None,
+        custom_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """
         Add a specific content type to the vector store.
@@ -160,6 +163,7 @@ class VectorStoreService:
             document_id: Source document identifier.
             content_type: Type of content (``'text'``, ``'table'``, ``'image'``).
             source_link: Optional source link URL provided by user.
+            custom_metadata: Optional custom metadata dict to merge into chunk metadata.
 
         Returns:
             List of generated content IDs.
@@ -181,6 +185,10 @@ class VectorStoreService:
             # Add source_link to metadata if provided
             if source_link:
                 metadata["source_link"] = source_link
+
+            # Merge custom_metadata if provided
+            if custom_metadata:
+                metadata.update(custom_metadata)
 
             summary_docs.append(
                 Document(page_content=summary, metadata=metadata)

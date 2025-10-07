@@ -24,6 +24,7 @@ class UploadResponse(BaseModel):
     document_id: str = Field(..., description="Unique identifier for the uploaded document")
     filename: str = Field(..., description="Name of the uploaded file")
     source_link: Optional[str] = Field(default=None, description="Source link provided by user")
+    custom_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Custom metadata provided by user")
     status: str = Field(..., description="Processing status")
     metadata: Dict[str, Any] = Field(..., description="Document metadata and statistics")
     message: str = Field(..., description="Status message")
