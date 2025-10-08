@@ -203,6 +203,24 @@ class RAGChainService:
         logger.info(f"Parsed {len(texts)} text docs and {len(images)} image docs")
         return {"texts": texts, "images": images}
 
+    def _build_context_text(self, docs: List[Any]) -> str:
+        """
+        Build context text from list of documents.
+
+        Args:
+            docs: List of document objects.
+
+        Returns:
+            Combined text context from all documents.
+        """
+        context_text = ""
+        for doc in docs:
+            if hasattr(doc, "text"):
+                context_text += doc.text + "\n\n"
+            else:
+                context_text += str(doc) + "\n\n"
+        return context_text
+
     def _build_prompt_with_history(
         self,
         question: str,
@@ -220,14 +238,10 @@ class RAGChainService:
         Returns:
             ChatPromptTemplate with history, context, and question.
         """
-        # Combine text context
+        # Combine text context using helper method
         context_text = ""
         if docs_by_type["texts"]:
-            for text_element in docs_by_type["texts"]:
-                if hasattr(text_element, "text"):
-                    context_text += text_element.text + "\n\n"
-                else:
-                    context_text += str(text_element) + "\n\n"
+            context_text = self._build_context_text(docs_by_type["texts"])
 
         # Convert chat history to LangChain message format
         history_messages = []
@@ -239,18 +253,18 @@ class RAGChainService:
 
         # Build system message with instructions
         system_message = SystemMessage(
-            content="""You are an IT support assistant. Answer questions based on the provided context and conversation history.
-If the question refers to previous conversation (using words like 'it', 'that', 'this'), use the chat history to understand what the user is referring to.
-Provide clear and concise answers."""
+            content="""Anda adalah asisten IT support. Jawab pertanyaan berdasarkan konteks yang diberikan dan riwayat percakapan.
+Jika pertanyaan merujuk ke percakapan sebelumnya (menggunakan kata seperti 'itu', 'tersebut', 'ini'), gunakan riwayat chat untuk memahami yang dimaksud pengguna.
+Berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia."""
         )
 
         # Build prompt content with context
-        prompt_text = f"""Context from knowledge base:
+        prompt_text = f"""Konteks dari knowledge base:
 {context_text}
 
-Current question: {question}
+Pertanyaan saat ini: {question}
 
-Provide a clear and concise answer based on the context above and conversation history."""
+Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas dan riwayat percakapan. Jawab dalam bahasa Indonesia."""
 
         prompt_content = [{"type": "text", "text": prompt_text}]
 
@@ -282,24 +296,20 @@ Provide a clear and concise answer based on the context above and conversation h
         Returns:
             ChatPromptTemplate with context and question.
         """
-        # Combine text context
+        # Combine text context using helper method
         context_text = ""
         if docs_by_type["texts"]:
-            for text_element in docs_by_type["texts"]:
-                if hasattr(text_element, "text"):
-                    context_text += text_element.text + "\n\n"
-                else:
-                    context_text += str(text_element) + "\n\n"
+            context_text = self._build_context_text(docs_by_type["texts"])
 
         # Build prompt template
-        prompt_text = f"""Answer the question based only on the following context, which can include text, tables, and images.
+        prompt_text = f"""Jawab pertanyaan hanya berdasarkan konteks berikut, yang dapat berisi teks, tabel, dan gambar.
 
-        Context:
-        {context_text}
+Konteks:
+{context_text}
 
-        Question: {question}
+Pertanyaan: {question}
 
-        Provide a clear and concise answer based on the context above."""
+Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas. Jawab dalam bahasa Indonesia."""
 
         prompt_content = [{"type": "text", "text": prompt_text}]
 
