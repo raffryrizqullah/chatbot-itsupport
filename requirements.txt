@@ -28,5 +28,14 @@ pinecone-client
 redis
 hiredis
 
+# Database (PostgreSQL)
+sqlalchemy[asyncio]
+asyncpg
+alembic
+
+# Authentication & Security
+passlib[bcrypt]
+python-jose[cryptography]
+
 # Environment & Utils
 python-dotenv
