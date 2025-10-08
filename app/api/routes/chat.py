@@ -5,6 +5,7 @@ Provides endpoints for viewing and managing conversation history stored in Redis
 """
 
 from typing import List, Dict, Any
+from functools import lru_cache
 from fastapi import APIRouter, HTTPException, status
 from app.models.schemas import ErrorResponse
 from app.services.chat_memory import ChatMemoryService
@@ -14,16 +15,11 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Lazy initialization
-_chat_memory = None
 
-
+@lru_cache()
 def get_chat_memory() -> ChatMemoryService:
-    """Get or create chat memory service instance."""
-    global _chat_memory
-    if _chat_memory is None:
-        _chat_memory = ChatMemoryService()
-    return _chat_memory
+    """Get or create chat memory service instance (cached)."""
+    return ChatMemoryService()
 
 
 class ChatHistoryResponse(BaseModel):

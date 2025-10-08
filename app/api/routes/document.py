@@ -5,12 +5,15 @@ Handles PDF document uploads, processing, and metadata retrieval.
 """
 
 from typing import List, Union, Optional, Dict, Any
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
+from functools import lru_cache
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends
 from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse
 from app.services.pdf_processor import PDFProcessor
 from app.services.summarizer import SummarizerService
 from app.services.vectorstore import VectorStoreService
 from app.core.config import settings
+from app.core.dependencies import require_role
+from app.db.models import UserRole, User
 import uuid
 import os
 import json
@@ -20,67 +23,43 @@ from datetime import datetime
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Lazy initialization to avoid startup errors
-_pdf_processor = None
-_summarizer = None
-_vectorstore = None
 
-
+@lru_cache()
 def get_pdf_processor() -> PDFProcessor:
-    """Get or create PDF processor instance."""
-    global _pdf_processor
-    if _pdf_processor is None:
-        _pdf_processor = PDFProcessor()
-    return _pdf_processor
+    """Get or create PDF processor instance (cached)."""
+    return PDFProcessor()
 
 
+@lru_cache()
 def get_summarizer() -> SummarizerService:
-    """Get or create summarizer service instance."""
-    global _summarizer
-    if _summarizer is None:
-        _summarizer = SummarizerService()
-    return _summarizer
+    """Get or create summarizer service instance (cached)."""
+    return SummarizerService()
 
 
+@lru_cache()
 def get_vectorstore() -> VectorStoreService:
-    """Get or create vectorstore service instance."""
-    global _vectorstore
-    if _vectorstore is None:
-        _vectorstore = VectorStoreService()
-    return _vectorstore
+    """Get or create vectorstore service instance (cached)."""
+    return VectorStoreService()
 
 
-@router.post(
-    "/documents/upload",
-    response_model=Union[UploadResponse, BatchUploadResponse],
-    status_code=status.HTTP_201_CREATED,
-    tags=["documents"],
-    responses={
-        400: {"model": ErrorResponse},
-        500: {"model": ErrorResponse},
-    },
-)
-async def upload_document(
-    files: List[UploadFile] = File(...),
-    source_links: Optional[List[str]] = Form(None),
-    custom_metadata: Optional[str] = Form(None)
-) -> Union[UploadResponse, BatchUploadResponse]:
+def _validate_upload_request(
+    files: List[UploadFile],
+    source_links: Optional[List[str]],
+    custom_metadata: Optional[str],
+) -> Optional[Dict[str, Any]]:
     """
-    Upload and process one or more PDF documents.
-
-    Extracts text, tables, and images from PDFs, generates summaries,
-    and stores them in the vector database for retrieval.
+    Validate upload request parameters.
 
     Args:
-        files: One or more PDF files to upload and process.
-        source_links: Optional source links for each file (must match number of files).
-        custom_metadata: Optional custom metadata as JSON string (applies to all files).
+        files: List of uploaded files.
+        source_links: Optional list of source links.
+        custom_metadata: Optional JSON string with custom metadata.
 
     Returns:
-        UploadResponse for single file or BatchUploadResponse for multiple files.
+        Parsed custom metadata dictionary, or None if not provided.
 
     Raises:
-        HTTPException: If file validation or processing fails.
+        HTTPException: If validation fails.
     """
     # Validate source_links count matches files count
     if source_links is not None and len(source_links) != len(files):
@@ -114,6 +93,144 @@ async def upload_document(
                 detail=f"Invalid JSON in custom_metadata: {str(e)}",
             )
 
+    return metadata_dict
+
+
+async def _process_single_file(
+    file: UploadFile,
+    source_link: Optional[str],
+    metadata_dict: Optional[Dict[str, Any]],
+    pdf_processor: PDFProcessor,
+    summarizer: SummarizerService,
+    vectorstore: VectorStoreService,
+) -> UploadResponse:
+    """
+    Process a single uploaded PDF file.
+
+    Args:
+        file: Uploaded PDF file.
+        source_link: Optional source link for this file.
+        metadata_dict: Optional custom metadata.
+        pdf_processor: PDF processor service instance.
+        summarizer: Summarizer service instance.
+        vectorstore: Vector store service instance.
+
+    Returns:
+        UploadResponse with processing results.
+
+    Raises:
+        HTTPException: If file validation or processing fails.
+    """
+    # Validate file type
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File {file.filename}: Only PDF files are supported",
+        )
+
+    # Generate unique document ID
+    document_id = str(uuid.uuid4())
+
+    # Save uploaded file
+    file_path = os.path.join(settings.pdf_upload_dir, f"{document_id}.pdf")
+    os.makedirs(settings.pdf_upload_dir, exist_ok=True)
+
+    with open(file_path, "wb") as f:
+        content = await file.read()
+
+        # Check file size
+        if len(content) > settings.pdf_max_file_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File {file.filename}: File size exceeds maximum allowed size of {settings.pdf_max_file_size} bytes",
+            )
+
+        f.write(content)
+
+    logger.info(f"Saved uploaded file: {file_path}")
+
+    # Process PDF
+    extracted_content = pdf_processor.process_pdf(file_path)
+
+    # Generate summaries
+    text_summaries = summarizer.summarize_texts(extracted_content.texts)
+    table_summaries = summarizer.summarize_tables(extracted_content.tables)
+    image_summaries = summarizer.summarize_images(extracted_content.images)
+
+    # Add to vector store with source_link and custom_metadata
+    counts = vectorstore.add_documents(
+        text_chunks=extracted_content.texts,
+        text_summaries=text_summaries,
+        tables=extracted_content.tables,
+        table_summaries=table_summaries,
+        images=extracted_content.images,
+        image_summaries=image_summaries,
+        document_id=document_id,
+        source_link=source_link,
+        custom_metadata=metadata_dict,
+    )
+
+    logger.info(f"Document {document_id} processed successfully")
+
+    # Create success response
+    return UploadResponse(
+        document_id=document_id,
+        filename=file.filename,
+        source_link=source_link,
+        custom_metadata=metadata_dict,
+        status="completed",
+        metadata={
+            "num_texts": counts["texts"],
+            "num_tables": counts["tables"],
+            "num_images": counts["images"],
+            "total_chunks": counts["total"],
+            "upload_timestamp": datetime.utcnow().isoformat(),
+        },
+        message="Document processed and indexed successfully",
+    )
+
+
+@router.post(
+    "/documents/upload",
+    response_model=Union[UploadResponse, BatchUploadResponse],
+    status_code=status.HTTP_201_CREATED,
+    tags=["documents"],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    responses={
+        400: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+async def upload_document(
+    files: List[UploadFile] = File(...),
+    source_links: Optional[List[str]] = Form(None),
+    custom_metadata: Optional[str] = Form(None),
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+) -> Union[UploadResponse, BatchUploadResponse]:
+    """
+    Upload and process one or more PDF documents (Admin only).
+
+    Extracts text, tables, and images from PDFs, generates summaries,
+    and stores them in the vector database for retrieval.
+
+    Requires admin authentication via Bearer token.
+
+    Args:
+        files: One or more PDF files to upload and process.
+        source_links: Optional source links for each file (must match number of files).
+        custom_metadata: Optional custom metadata as JSON string (applies to all files).
+        current_user: Current authenticated admin user.
+
+    Returns:
+        UploadResponse for single file or BatchUploadResponse for multiple files.
+
+    Raises:
+        HTTPException: If file validation or processing fails.
+    """
+    # Validate request parameters
+    metadata_dict = _validate_upload_request(files, source_links, custom_metadata)
+
     # Get service instances
     pdf_processor = get_pdf_processor()
     summarizer = get_summarizer()
@@ -128,72 +245,13 @@ async def upload_document(
         source_link = source_links[idx] if source_links else None
 
         try:
-            # Validate file type
-            if not file.filename.endswith(".pdf"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"File {file.filename}: Only PDF files are supported",
-                )
-
-            # Generate unique document ID
-            document_id = str(uuid.uuid4())
-
-            # Save uploaded file
-            file_path = os.path.join(settings.pdf_upload_dir, f"{document_id}.pdf")
-            os.makedirs(settings.pdf_upload_dir, exist_ok=True)
-
-            with open(file_path, "wb") as f:
-                content = await file.read()
-
-                # Check file size
-                if len(content) > settings.pdf_max_file_size:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"File {file.filename}: File size exceeds maximum allowed size of {settings.pdf_max_file_size} bytes",
-                    )
-
-                f.write(content)
-
-            logger.info(f"Saved uploaded file: {file_path}")
-
-            # Process PDF
-            extracted_content = pdf_processor.process_pdf(file_path)
-
-            # Generate summaries
-            text_summaries = summarizer.summarize_texts(extracted_content.texts)
-            table_summaries = summarizer.summarize_tables(extracted_content.tables)
-            image_summaries = summarizer.summarize_images(extracted_content.images)
-
-            # Add to vector store with source_link and custom_metadata
-            counts = vectorstore.add_documents(
-                text_chunks=extracted_content.texts,
-                text_summaries=text_summaries,
-                tables=extracted_content.tables,
-                table_summaries=table_summaries,
-                images=extracted_content.images,
-                image_summaries=image_summaries,
-                document_id=document_id,
+            result = await _process_single_file(
+                file=file,
                 source_link=source_link,
-                custom_metadata=metadata_dict,
-            )
-
-            logger.info(f"Document {document_id} processed successfully")
-
-            # Create success response
-            result = UploadResponse(
-                document_id=document_id,
-                filename=file.filename,
-                source_link=source_link,
-                custom_metadata=metadata_dict,
-                status="completed",
-                metadata={
-                    "num_texts": counts["texts"],
-                    "num_tables": counts["tables"],
-                    "num_images": counts["images"],
-                    "total_chunks": counts["total"],
-                    "upload_timestamp": datetime.utcnow().isoformat(),
-                },
-                message="Document processed and indexed successfully",
+                metadata_dict=metadata_dict,
+                pdf_processor=pdf_processor,
+                summarizer=summarizer,
+                vectorstore=vectorstore,
             )
             results.append(result)
             successful += 1

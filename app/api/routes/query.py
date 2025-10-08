@@ -4,9 +4,10 @@ Query endpoints for RAG-based question answering.
 Handles user queries against indexed documents using retrieval-augmented generation.
 """
 
-from typing import Union
+from typing import Union, Optional, Dict, Any
+from functools import lru_cache
 import uuid
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from app.models.schemas import (
     QueryRequest,
     QueryResponse,
@@ -16,39 +17,60 @@ from app.models.schemas import (
 from app.services.vectorstore import VectorStoreService
 from app.services.rag_chain import RAGChainService
 from app.services.chat_memory import ChatMemoryService
+from app.core.dependencies import get_current_user
+from app.db.models import User, UserRole
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Lazy initialization to avoid startup errors
-_vectorstore = None
-_rag_chain = None
-_chat_memory = None
 
-
+@lru_cache()
 def get_vectorstore() -> VectorStoreService:
-    """Get or create vectorstore service instance."""
-    global _vectorstore
-    if _vectorstore is None:
-        _vectorstore = VectorStoreService()
-    return _vectorstore
+    """Get or create vectorstore service instance (cached)."""
+    return VectorStoreService()
 
 
+@lru_cache()
 def get_rag_chain() -> RAGChainService:
-    """Get or create RAG chain service instance."""
-    global _rag_chain
-    if _rag_chain is None:
-        _rag_chain = RAGChainService()
-    return _rag_chain
+    """Get or create RAG chain service instance (cached)."""
+    return RAGChainService()
 
 
+@lru_cache()
 def get_chat_memory() -> ChatMemoryService:
-    """Get or create chat memory service instance."""
-    global _chat_memory
-    if _chat_memory is None:
-        _chat_memory = ChatMemoryService()
-    return _chat_memory
+    """Get or create chat memory service instance (cached)."""
+    return ChatMemoryService()
+
+
+def build_metadata_filter(user: Optional[User]) -> Optional[Dict[str, Any]]:
+    """
+    Build metadata filter based on user role.
+
+    Args:
+        user: Current authenticated user (None for anonymous).
+
+    Returns:
+        Metadata filter dictionary for Pinecone search, or None for no filtering.
+
+    Rules:
+        - Admin: Access all data (no filter)
+        - Lecturer: Access public + internal data
+        - Student/Anonymous: Access public data only
+    """
+    if not user:
+        # Anonymous user - only public data
+        return {"sensitivity": "public"}
+
+    if user.role == UserRole.ADMIN:
+        # Admin - no filter, access all
+        return None
+    elif user.role == UserRole.LECTURER:
+        # Lecturer - public and internal
+        return {"sensitivity": {"$in": ["public", "internal"]}}
+    else:
+        # Student - public only
+        return {"sensitivity": "public"}
 
 
 @router.post(
@@ -60,15 +82,24 @@ def get_chat_memory() -> ChatMemoryService:
         500: {"model": ErrorResponse},
     },
 )
-async def query_documents(request: QueryRequest) -> Union[QueryResponse, QueryWithSourcesResponse]:
+async def query_documents(
+    request: QueryRequest,
+    current_user: Optional[User] = Depends(get_current_user),
+) -> Union[QueryResponse, QueryWithSourcesResponse]:
     """
     Query indexed documents with a question.
 
     Retrieves relevant document chunks and generates an answer using RAG.
     Supports conversation history via session_id for multi-turn conversations.
 
+    **Optional Authentication**: Include Bearer token to access role-based data.
+    - Anonymous/Student: Public data only
+    - Lecturer: Public + Internal data
+    - Admin: All data
+
     Args:
         request: Query request with question and optional parameters.
+        current_user: Current authenticated user (optional).
 
     Returns:
         QueryResponse with generated answer and metadata.
@@ -92,9 +123,16 @@ async def query_documents(request: QueryRequest) -> Union[QueryResponse, QueryWi
         chat_history = chat_memory.get_history(session_id)
         logger.info(f"Loaded {len(chat_history)} messages from chat history")
 
-        # Retrieve relevant documents
+        # Build metadata filter based on user role
+        metadata_filter = build_metadata_filter(current_user)
+        if current_user:
+            logger.info(f"User {current_user.username} ({current_user.role}) - Filter: {metadata_filter}")
+        else:
+            logger.info(f"Anonymous user - Filter: {metadata_filter}")
+
+        # Retrieve relevant documents with role-based filtering
         k = request.top_k if request.top_k is not None else None
-        retrieved_docs = vectorstore.search(request.question, k=k)
+        retrieved_docs = vectorstore.search(request.question, k=k, metadata_filter=metadata_filter)
 
         if not retrieved_docs:
             logger.warning("No relevant documents found")

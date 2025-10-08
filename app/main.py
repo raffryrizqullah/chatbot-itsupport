@@ -5,11 +5,13 @@ This module initializes the FastAPI app with all routes, middleware,
 and error handlers.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import health, document, query, chat
+from app.api.routes import health, document, query, chat, auth
 from app.core.config import settings
+from app.db.database import init_db, close_db
 import logging
 
 # Configure logging
@@ -20,6 +22,32 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for application startup and shutdown.
+
+    Handles database initialization on startup and cleanup on shutdown.
+
+    Args:
+        app: FastAPI application instance.
+
+    Yields:
+        Control to the application during its lifetime.
+    """
+    # Startup
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    logger.info(f"API documentation available at /docs")
+    await init_db()
+
+    yield
+
+    # Shutdown
+    logger.info(f"Shutting down {settings.app_name}")
+    await close_db()
+
+
 # Initialize FastAPI app
 app = FastAPI(
     title=settings.app_name,
@@ -27,6 +55,7 @@ app = FastAPI(
     description="Multi-modal RAG API for PDF document processing and question answering",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
@@ -65,22 +94,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(health.router, prefix="")
+app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}/auth")
 app.include_router(document.router, prefix=settings.api_v1_prefix)
 app.include_router(query.router, prefix=settings.api_v1_prefix)
 app.include_router(chat.router, prefix=settings.api_v1_prefix)
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Execute actions on application startup."""
-    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
-    logger.info(f"API documentation available at /docs")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Execute actions on application shutdown."""
-    logger.info(f"Shutting down {settings.app_name}")
 
 
 if __name__ == "__main__":
