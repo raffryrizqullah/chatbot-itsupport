@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     chat_history_ttl: int = 7200  # 2 hours in seconds
     chat_max_messages: int = 10  # Keep last 10 messages per session
 
+    # PostgreSQL Configuration
+    database_url: str = "postgresql+asyncpg://user:password@localhost:5432/chatbot_db"
+
+    # JWT Authentication Configuration
+    jwt_secret_key: str  # Generate with: openssl rand -hex 32
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
+
     # LangSmith (Optional)
     langchain_api_key: Optional[str] = None
     langchain_tracing_v2: bool = False
