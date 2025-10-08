@@ -9,6 +9,7 @@ import secrets
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.db.models import APIKey, User
 from app.core.security import get_password_hash, verify_password
 from app.core.exceptions import APIKeyError
@@ -95,7 +96,15 @@ async def create_api_key(
 
     db.add(api_key)
     await db.commit()
+
+    # Refresh with eager loading of user relationship
     await db.refresh(api_key)
+    result = await db.execute(
+        select(APIKey)
+        .options(selectinload(APIKey.user))
+        .where(APIKey.id == api_key.id)
+    )
+    api_key = result.scalar_one()
 
     logger.info(
         f"Created API key '{name}' for user {user.username} by admin {admin_id}"
@@ -157,9 +166,9 @@ async def list_api_keys(
         user_id: Optional user ID to filter by.
 
     Returns:
-        List of APIKey objects.
+        List of APIKey objects with eager-loaded user relationships.
     """
-    query = select(APIKey)
+    query = select(APIKey).options(selectinload(APIKey.user))
 
     if user_id:
         query = query.where(APIKey.user_id == user_id)
@@ -182,9 +191,13 @@ async def get_api_key_by_id(db: AsyncSession, key_id: str) -> Optional[APIKey]:
         key_id: API key ID (UUID string).
 
     Returns:
-        APIKey object if found, None otherwise.
+        APIKey object with eager-loaded user relationship if found, None otherwise.
     """
-    result = await db.execute(select(APIKey).where(APIKey.id == key_id))
+    result = await db.execute(
+        select(APIKey)
+        .options(selectinload(APIKey.user))
+        .where(APIKey.id == key_id)
+    )
     api_key = result.scalar_one_or_none()
     return api_key
 
