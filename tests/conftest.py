@@ -6,6 +6,7 @@ including database session, mock Redis client, and test data factories.
 """
 
 import pytest
+import pytest_asyncio
 import asyncio
 from typing import AsyncGenerator, Generator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -33,7 +34,7 @@ def event_loop() -> Generator:
     loop.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_engine():
     """
     Create in-memory SQLite database engine for testing.
@@ -59,7 +60,7 @@ async def db_engine():
     await engine.dispose()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_session(db_engine) -> AsyncGenerator[AsyncSession, None]:
     """
     Create database session for tests.
@@ -100,7 +101,7 @@ def mock_redis():
     return mock
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def sample_user(db_session: AsyncSession) -> User:
     """
     Create a sample user for testing.
@@ -127,7 +128,7 @@ async def sample_user(db_session: AsyncSession) -> User:
     return user
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def admin_user(db_session: AsyncSession) -> User:
     """
     Create an admin user for testing.
@@ -154,7 +155,7 @@ async def admin_user(db_session: AsyncSession) -> User:
     return user
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def lecturer_user(db_session: AsyncSession) -> User:
     """
     Create a lecturer user for testing.

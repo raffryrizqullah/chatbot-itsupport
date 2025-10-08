@@ -5,6 +5,7 @@ Handles user creation, retrieval, update, and deletion operations.
 """
 
 from typing import Optional
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.models import User, UserRole
@@ -58,7 +59,13 @@ async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     Returns:
         User object if found, None otherwise.
     """
-    result = await db.execute(select(User).where(User.id == user_id))
+    # Convert string to UUID for SQLAlchemy comparison
+    try:
+        uuid_obj = UUID(user_id)
+    except (ValueError, AttributeError):
+        return None
+
+    result = await db.execute(select(User).where(User.id == uuid_obj))
     user = result.scalar_one_or_none()
     return user
 
