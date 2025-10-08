@@ -41,6 +41,12 @@ slowapi
 # Environment & Utils
 python-dotenv
 
+# Storage (S3-compatible for Cloudflare R2)
+boto3
+
+# Background Tasks & Scheduling
+apscheduler
+
 # Testing
 pytest
 pytest-asyncio

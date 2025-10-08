@@ -52,3 +52,9 @@ class APIKeyError(Exception):
     """Exception raised for API key operations errors."""
 
     pass
+
+
+class StorageError(Exception):
+    """Exception raised for storage operations errors."""
+
+    pass

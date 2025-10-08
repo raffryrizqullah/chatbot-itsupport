@@ -15,6 +15,7 @@ from app.api.routes import health, document, query, chat, auth, api_keys
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.db.database import init_db, close_db
+from app.services.cleanup_scheduler import start_scheduler, stop_scheduler
 import logging
 
 # Configure logging
@@ -31,7 +32,8 @@ async def lifespan(app: FastAPI):
     """
     Lifespan context manager for application startup and shutdown.
 
-    Handles database initialization on startup and cleanup on shutdown.
+    Handles database initialization and cleanup scheduler on startup,
+    and cleanup on shutdown.
 
     Args:
         app: FastAPI application instance.
@@ -43,11 +45,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"API documentation available at /docs")
     await init_db()
+    await start_scheduler()
 
     yield
 
     # Shutdown
     logger.info(f"Shutting down {settings.app_name}")
+    await stop_scheduler()
     await close_db()
 
 

@@ -10,6 +10,15 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 
+class WelcomeResponse(BaseModel):
+    """Welcome message response schema for root endpoint."""
+
+    message: str = Field(..., description="Welcome message")
+    version: str = Field(..., description="API version")
+    status: str = Field(..., description="Service status")
+    docs_url: str = Field(..., description="API documentation URL")
+
+
 class HealthResponse(BaseModel):
     """Health check response schema."""
 

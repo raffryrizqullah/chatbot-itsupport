@@ -34,12 +34,24 @@ class Settings(BaseSettings):
     pinecone_metric: str = "cosine"
 
     # PDF Processing Configuration
-    pdf_upload_dir: str = "./content"
+    pdf_upload_dir: str = "./content"  # Deprecated: Use R2 storage instead
     pdf_max_file_size: int = 10485760  # 10 MB (10 * 1024 * 1024)
     pdf_chunking_strategy: str = "by_title"
     pdf_max_characters: int = 10000
     pdf_combine_text_under_n_chars: int = 2000
     pdf_new_after_n_chars: int = 6000
+    pdf_retention_days: int = 7  # Auto-delete files older than this
+
+    # Cloudflare R2 Storage Configuration
+    r2_account_id: str
+    r2_access_key_id: str
+    r2_secret_access_key: str
+    r2_bucket_name: str
+
+    @property
+    def r2_endpoint_url(self) -> str:
+        """Generate R2 endpoint URL from account ID."""
+        return f"https://{self.r2_account_id}.r2.cloudflarestorage.com"
 
     # RAG Configuration
     rag_top_k: int = 4  # Number of documents to retrieve

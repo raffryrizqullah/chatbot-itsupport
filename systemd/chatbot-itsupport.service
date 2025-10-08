@@ -1,0 +1,27 @@
+[Unit]
+Description=Chatbot IT Support API Service
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/chatbot-itsupport
+Environment="PATH=/www/wwwroot/chatbot-itsupport/venv/bin"
+ExecStart=/www/wwwroot/chatbot-itsupport/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=append:/www/wwwroot/chatbot-itsupport/logs/app.log
+StandardError=append:/www/wwwroot/chatbot-itsupport/logs/error.log
+
+[Install]
+WantedBy=multi-user.target

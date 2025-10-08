@@ -5,8 +5,9 @@ This module handles the extraction and parsing of multi-modal content
 from PDF documents using the unstructured library.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Union, BinaryIO
 from dataclasses import dataclass
+from io import BytesIO
 from unstructured.partition.pdf import partition_pdf
 from unstructured.documents.elements import CompositeElement, Table, Image
 from app.core.config import settings
@@ -51,7 +52,7 @@ class PDFProcessor:
             ExtractedContent containing separated text chunks, tables, and images.
 
         Raises:
-            Exception: If PDF processing fails.
+            PDFProcessingError: If PDF processing fails.
         """
         try:
             logger.info(f"Processing PDF: {file_path}")
@@ -82,6 +83,54 @@ class PDFProcessor:
 
         except Exception as e:
             msg = f"Failed to process PDF: {str(e)}"
+            logger.error(msg)
+            raise PDFProcessingError(msg)
+
+    def process_pdf_from_bytes(
+        self, file_obj: Union[BytesIO, BinaryIO], filename: str = "document.pdf"
+    ) -> ExtractedContent:
+        """
+        Extract text, tables, and images from a PDF file object (in-memory).
+
+        Args:
+            file_obj: File-like object containing PDF data.
+            filename: Original filename for logging purposes.
+
+        Returns:
+            ExtractedContent containing separated text chunks, tables, and images.
+
+        Raises:
+            PDFProcessingError: If PDF processing fails.
+        """
+        try:
+            logger.info(f"Processing PDF from memory: {filename}")
+
+            # Partition PDF into elements from file object
+            chunks = partition_pdf(
+                file=file_obj,
+                infer_table_structure=True,
+                strategy="hi_res",
+                extract_image_block_types=["Image"],
+                extract_image_block_to_payload=True,
+                chunking_strategy=self.chunking_strategy,
+                max_characters=self.max_characters,
+                combine_text_under_n_chars=self.combine_text_under_n_chars,
+                new_after_n_chars=self.new_after_n_chars,
+            )
+
+            # Separate elements by type
+            texts, tables = self._separate_text_and_tables(chunks)
+            images = self._extract_images(chunks)
+
+            logger.info(
+                f"Extracted {len(texts)} text chunks, "
+                f"{len(tables)} tables, {len(images)} images from {filename}"
+            )
+
+            return ExtractedContent(texts=texts, tables=tables, images=images)
+
+        except Exception as e:
+            msg = f"Failed to process PDF from memory: {str(e)}"
             logger.error(msg)
             raise PDFProcessingError(msg)
 

@@ -6,17 +6,19 @@ Handles PDF document uploads, processing, and metadata retrieval.
 
 from typing import List, Union, Optional, Dict, Any
 from functools import lru_cache
+from io import BytesIO
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, Request
 from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse
 from app.services.pdf_processor import PDFProcessor
 from app.services.summarizer import SummarizerService
 from app.services.vectorstore import VectorStoreService
+from app.services.r2_storage import R2StorageService
 from app.core.config import settings
 from app.core.dependencies import require_role
 from app.core.rate_limit import limiter, RATE_LIMITS
+from app.core.exceptions import StorageError
 from app.db.models import UserRole, User
 import uuid
-import os
 import json
 import logging
 from datetime import datetime
@@ -41,6 +43,12 @@ def get_summarizer() -> SummarizerService:
 def get_vectorstore() -> VectorStoreService:
     """Get or create vectorstore service instance (cached)."""
     return VectorStoreService()
+
+
+@lru_cache()
+def get_r2_storage() -> R2StorageService:
+    """Get or create R2 storage service instance (cached)."""
+    return R2StorageService()
 
 
 def _validate_upload_request(
@@ -104,6 +112,7 @@ async def _process_single_file(
     pdf_processor: PDFProcessor,
     summarizer: SummarizerService,
     vectorstore: VectorStoreService,
+    r2_storage: R2StorageService,
 ) -> UploadResponse:
     """
     Process a single uploaded PDF file.
@@ -115,6 +124,7 @@ async def _process_single_file(
         pdf_processor: PDF processor service instance.
         summarizer: Summarizer service instance.
         vectorstore: Vector store service instance.
+        r2_storage: R2 storage service instance.
 
     Returns:
         UploadResponse with processing results.
@@ -132,26 +142,31 @@ async def _process_single_file(
     # Generate unique document ID
     document_id = str(uuid.uuid4())
 
-    # Save uploaded file
-    file_path = os.path.join(settings.pdf_upload_dir, f"{document_id}.pdf")
-    os.makedirs(settings.pdf_upload_dir, exist_ok=True)
+    # Read file content into memory
+    content = await file.read()
 
-    with open(file_path, "wb") as f:
-        content = await file.read()
+    # Check file size
+    if len(content) > settings.pdf_max_file_size:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File {file.filename}: File size exceeds maximum allowed size of {settings.pdf_max_file_size} bytes",
+        )
 
-        # Check file size
-        if len(content) > settings.pdf_max_file_size:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File {file.filename}: File size exceeds maximum allowed size of {settings.pdf_max_file_size} bytes",
-            )
+    # Upload to R2 storage
+    try:
+        storage_key = f"pdfs/{document_id}.pdf"
+        file_obj = BytesIO(content)
+        r2_storage.upload_file(file_obj, storage_key, content_type="application/pdf")
+        logger.info(f"Uploaded file to R2: {storage_key}")
+    except StorageError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload file to storage: {str(e)}",
+        )
 
-        f.write(content)
-
-    logger.info(f"Saved uploaded file: {file_path}")
-
-    # Process PDF
-    extracted_content = pdf_processor.process_pdf(file_path)
+    # Process PDF from memory
+    file_obj = BytesIO(content)
+    extracted_content = pdf_processor.process_pdf_from_bytes(file_obj, file.filename)
 
     # Generate summaries
     text_summaries = summarizer.summarize_texts(extracted_content.texts)
@@ -239,6 +254,7 @@ async def upload_document(
     pdf_processor = get_pdf_processor()
     summarizer = get_summarizer()
     vectorstore = get_vectorstore()
+    r2_storage = get_r2_storage()
 
     results = []
     successful = 0
@@ -256,6 +272,7 @@ async def upload_document(
                 pdf_processor=pdf_processor,
                 summarizer=summarizer,
                 vectorstore=vectorstore,
+                r2_storage=r2_storage,
             )
             results.append(result)
             successful += 1
