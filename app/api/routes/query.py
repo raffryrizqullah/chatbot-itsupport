@@ -17,7 +17,7 @@ from app.models.schemas import (
 from app.services.vectorstore import VectorStoreService
 from app.services.rag_chain import RAGChainService
 from app.services.chat_memory import ChatMemoryService
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user_flexible
 from app.db.models import User, UserRole
 import logging
 
@@ -84,7 +84,7 @@ def build_metadata_filter(user: Optional[User]) -> Optional[Dict[str, Any]]:
 )
 async def query_documents(
     request: QueryRequest,
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_flexible),
 ) -> Union[QueryResponse, QueryWithSourcesResponse]:
     """
     Query indexed documents with a question.
@@ -92,14 +92,18 @@ async def query_documents(
     Retrieves relevant document chunks and generates an answer using RAG.
     Supports conversation history via session_id for multi-turn conversations.
 
-    **Optional Authentication**: Include Bearer token to access role-based data.
+    **Authentication**: Supports both JWT token and API key.
+    - **JWT Token**: `Authorization: Bearer <token>`
+    - **API Key**: `X-API-Key: sk-proj-xxxxx`
+
+    **Role-Based Data Access**:
     - Anonymous/Student: Public data only
     - Lecturer: Public + Internal data
     - Admin: All data
 
     Args:
         request: Query request with question and optional parameters.
-        current_user: Current authenticated user (optional).
+        current_user: Current authenticated user (optional, supports JWT or API key).
 
     Returns:
         QueryResponse with generated answer and metadata.

@@ -129,3 +129,38 @@ class UserResponse(BaseModel):
     role: str = Field(..., description="User role")
     is_active: bool = Field(..., description="Whether user is active")
     created_at: datetime = Field(..., description="Account creation timestamp")
+
+
+# API Key Schemas
+
+class APIKeyCreate(BaseModel):
+    """Request schema for creating an API key."""
+
+    user_id: str = Field(..., description="UUID of user who will own this API key")
+    name: str = Field(..., min_length=1, max_length=255, description="Descriptive name for the API key")
+
+
+class APIKeyResponse(BaseModel):
+    """Response schema for API key information."""
+
+    id: str = Field(..., description="API key ID")
+    key_prefix: str = Field(..., description="Key prefix for display (e.g., 'sk-proj-abc...')")
+    name: str = Field(..., description="API key name")
+    user_id: str = Field(..., description="Owner user ID")
+    username: str = Field(..., description="Owner username")
+    is_active: bool = Field(..., description="Whether API key is active")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    last_used_at: Optional[datetime] = Field(default=None, description="Last usage timestamp")
+
+
+class APIKeyCreateResponse(APIKeyResponse):
+    """Response schema for API key creation (includes full key)."""
+
+    api_key: str = Field(..., description="Full API key (only shown once!)")
+
+
+class APIKeyListResponse(BaseModel):
+    """Response schema for listing API keys."""
+
+    total: int = Field(..., description="Total number of API keys")
+    api_keys: List[APIKeyResponse] = Field(..., description="List of API keys")

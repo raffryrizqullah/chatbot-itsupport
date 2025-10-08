@@ -1,11 +1,12 @@
 """
 SQLAlchemy ORM models for database tables.
 
-Defines User model with authentication and role-based access control.
+Defines User and APIKey models with authentication and role-based access control.
 """
 
-from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum
+from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 import enum
@@ -63,3 +64,58 @@ class User(Base):
     def __repr__(self) -> str:
         """String representation of User."""
         return f"<User(username={self.username}, role={self.role})>"
+
+
+class APIKey(Base):
+    """
+    API Key model for programmatic access to the API.
+
+    API keys are created by admins and assigned to users for authentication
+    in API requests. Keys are hashed before storage for security.
+
+    Attributes:
+        id: Unique API key identifier (UUID).
+        key_hash: Bcrypt hash of the API key.
+        key_prefix: First 12 characters of key for display (``'sk-proj-abc...'``).
+        name: Descriptive name for the API key (e.g., ``'Chatbot Website'``).
+        user_id: Foreign key to the user who owns this key.
+        is_active: Whether the API key is active and can be used.
+        created_at: Timestamp when API key was created.
+        last_used_at: Timestamp when API key was last used (nullable).
+        created_by: Foreign key to the admin user who created this key.
+    """
+
+    __tablename__ = "api_keys"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        unique=True,
+        nullable=False,
+    )
+    key_hash = Column(String(255), unique=True, index=True, nullable=False)
+    key_prefix = Column(String(20), nullable=False)
+    name = Column(String(255), nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    created_by = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id], backref="api_keys")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+
+    def __repr__(self) -> str:
+        """String representation of APIKey."""
+        return f"<APIKey(prefix={self.key_prefix}, user={self.user_id}, active={self.is_active})>"

@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import health, document, query, chat, auth
+from app.api.routes import health, document, query, chat, auth, api_keys
 from app.core.config import settings
 from app.db.database import init_db, close_db
 import logging
@@ -95,6 +95,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(health.router, prefix="")
 app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}/auth")
+app.include_router(api_keys.router, prefix=f"{settings.api_v1_prefix}/admin")
 app.include_router(document.router, prefix=settings.api_v1_prefix)
 app.include_router(query.router, prefix=settings.api_v1_prefix)
 app.include_router(chat.router, prefix=settings.api_v1_prefix)

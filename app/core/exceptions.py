@@ -46,3 +46,9 @@ class AuthenticationError(Exception):
     """Exception raised for authentication errors."""
 
     pass
+
+
+class APIKeyError(Exception):
+    """Exception raised for API key operations errors."""
+
+    pass
