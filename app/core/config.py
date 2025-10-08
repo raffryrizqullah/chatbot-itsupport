@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: Optional[str] = None
 
+    # Chat Memory Configuration
+    chat_history_ttl: int = 7200  # 2 hours in seconds
+    chat_max_messages: int = 10  # Keep last 10 messages per session
+
     # LangSmith (Optional)
     langchain_api_key: Optional[str] = None
     langchain_tracing_v2: bool = False

@@ -73,15 +73,15 @@ curl -X POST "http://localhost:8000/api/v1/query" \
 
 Key environment variables:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key | Required |
-| `OPENAI_MODEL` | Model name | `gpt-4o-mini` |
-| `PINECONE_API_KEY` | Pinecone API key | Required |
-| `PINECONE_INDEX_NAME` | Index name | `multimodal-rag` |
-| `REDIS_HOST` | Redis host | `localhost` |
-| `REDIS_PORT` | Redis port | `6379` |
-| `RAG_TOP_K` | Retrieval count | `4` |
+| Variable              | Description      | Default          |
+| --------------------- | ---------------- | ---------------- |
+| `OPENAI_API_KEY`      | OpenAI API key   | Required         |
+| `OPENAI_MODEL`        | Model name       | `gpt-4o-mini`    |
+| `PINECONE_API_KEY`    | Pinecone API key | Required         |
+| `PINECONE_INDEX_NAME` | Index name       | `multimodal-rag` |
+| `REDIS_HOST`          | Redis host       | `localhost`      |
+| `REDIS_PORT`          | Redis port       | `6379`           |
+| `RAG_TOP_K`           | Retrieval count  | `4`              |
 
 See [`.env.example`](.env.example) for all options.
 
@@ -104,15 +104,15 @@ app/
 
 <div align="center">
 
-| Layer | Technology |
-|-------|-----------|
-| **Framework** | FastAPI |
-| **LLM** | GPT-4o-mini (OpenAI) |
-| **Vector DB** | Pinecone |
-| **Document Store** | Redis |
-| **Embeddings** | text-embedding-3-large |
-| **RAG Framework** | LangChain |
-| **PDF Processing** | Unstructured |
+| Layer              | Technology             |
+| ------------------ | ---------------------- |
+| **Framework**      | FastAPI                |
+| **LLM**            | GPT-4o-mini (OpenAI)   |
+| **Vector DB**      | Pinecone               |
+| **Document Store** | Redis                  |
+| **Embeddings**     | text-embedding-3-large |
+| **RAG Framework**  | LangChain              |
+| **PDF Processing** | Unstructured           |
 
 </div>
 
@@ -121,11 +121,13 @@ app/
 ### System Dependencies
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt-get install poppler-utils tesseract-ocr libmagic-dev redis-server
 ```
 
 **macOS:**
+
 ```bash
 brew install poppler tesseract libmagic redis
 ```

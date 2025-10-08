@@ -8,8 +8,8 @@ with LLM generation to answer questions based on retrieved context.
 from typing import List, Dict, Any, Union
 from base64 import b64decode
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
 from app.core.config import settings
@@ -33,6 +33,53 @@ class RAGChainService:
             temperature=settings.openai_temperature,
             api_key=settings.openai_api_key,
         )
+
+    def generate_answer_with_history(
+        self,
+        question: str,
+        retrieved_docs: List[Union[str, Document]],
+        chat_history: List[Dict[str, str]],
+    ) -> Dict[str, Any]:
+        """
+        Generate an answer with chat history context.
+
+        Args:
+            question: User's question.
+            retrieved_docs: List of documents retrieved from vector store.
+            chat_history: List of previous messages with 'role' and 'content' keys.
+
+        Returns:
+            Dictionary containing answer and metadata.
+        """
+        try:
+            logger.info(f"Generating answer with history for: {question[:50]}...")
+
+            # Parse documents by type
+            docs_by_type = self._parse_documents(retrieved_docs)
+
+            # Build prompt with history
+            prompt = self._build_prompt_with_history(question, docs_by_type, chat_history)
+
+            # Generate response
+            chain = prompt | self.model | StrOutputParser()
+            answer = chain.invoke({})
+
+            logger.info("Answer with history generated successfully")
+
+            return {
+                "answer": answer,
+                "context": {
+                    "num_texts": len(docs_by_type["texts"]),
+                    "num_images": len(docs_by_type["images"]),
+                    "has_chat_history": len(chat_history) > 0,
+                    "history_length": len(chat_history),
+                },
+            }
+
+        except Exception as e:
+            msg = f"Failed to generate answer with history: {str(e)}"
+            logger.error(msg)
+            raise Exception(msg)
 
     def generate_answer(
         self, question: str, retrieved_docs: List[Union[str, Document]]
@@ -147,6 +194,72 @@ class RAGChainService:
 
         logger.info(f"Parsed {len(texts)} text docs and {len(images)} image docs")
         return {"texts": texts, "images": images}
+
+    def _build_prompt_with_history(
+        self,
+        question: str,
+        docs_by_type: Dict[str, List[Any]],
+        chat_history: List[Dict[str, str]],
+    ) -> ChatPromptTemplate:
+        """
+        Build a prompt with chat history and context.
+
+        Args:
+            question: User's question.
+            docs_by_type: Parsed documents by type.
+            chat_history: List of previous messages.
+
+        Returns:
+            ChatPromptTemplate with history, context, and question.
+        """
+        # Combine text context
+        context_text = ""
+        if docs_by_type["texts"]:
+            for text_element in docs_by_type["texts"]:
+                if hasattr(text_element, "text"):
+                    context_text += text_element.text + "\n\n"
+                else:
+                    context_text += str(text_element) + "\n\n"
+
+        # Convert chat history to LangChain message format
+        history_messages = []
+        for msg in chat_history:
+            if msg["role"] == "user":
+                history_messages.append(HumanMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                history_messages.append(AIMessage(content=msg["content"]))
+
+        # Build system message with instructions
+        system_message = SystemMessage(
+            content="""You are an IT support assistant. Answer questions based on the provided context and conversation history.
+If the question refers to previous conversation (using words like 'it', 'that', 'this'), use the chat history to understand what the user is referring to.
+Provide clear and concise answers."""
+        )
+
+        # Build prompt content with context
+        prompt_text = f"""Context from knowledge base:
+{context_text}
+
+Current question: {question}
+
+Provide a clear and concise answer based on the context above and conversation history."""
+
+        prompt_content = [{"type": "text", "text": prompt_text}]
+
+        # Add images to prompt
+        if docs_by_type["images"]:
+            for image in docs_by_type["images"]:
+                prompt_content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image}"},
+                    }
+                )
+
+        # Construct messages: system + history + current question with context
+        messages = [system_message] + history_messages + [HumanMessage(content=prompt_content)]
+
+        return ChatPromptTemplate.from_messages(messages)
 
     def _build_prompt(
         self, question: str, docs_by_type: Dict[str, List[Any]]

@@ -44,6 +44,9 @@ class QueryRequest(BaseModel):
     """Request schema for query endpoint."""
 
     question: str = Field(..., min_length=1, description="Question to ask about documents")
+    session_id: Optional[str] = Field(
+        default=None, description="Session ID for conversation history (auto-generated if not provided)"
+    )
     include_sources: bool = Field(
         default=False, description="Whether to include source documents in response"
     )
@@ -56,6 +59,7 @@ class QueryResponse(BaseModel):
     """Response schema for query endpoint."""
 
     answer: str = Field(..., description="Generated answer to the question")
+    session_id: str = Field(..., description="Session ID for this conversation")
     metadata: Dict[str, Any] = Field(..., description="Response metadata")
 
 
@@ -63,6 +67,7 @@ class QueryWithSourcesResponse(BaseModel):
     """Response schema for query endpoint with sources included."""
 
     answer: str = Field(..., description="Generated answer to the question")
+    session_id: str = Field(..., description="Session ID for this conversation")
     sources: Dict[str, Any] = Field(..., description="Source documents used for answer")
     metadata: Dict[str, Any] = Field(..., description="Response metadata")
 
