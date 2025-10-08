@@ -90,3 +90,42 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error type")
     message: str = Field(..., description="Error message")
     detail: Optional[str] = Field(default=None, description="Detailed error information")
+
+
+# Authentication Schemas
+
+class LoginRequest(BaseModel):
+    """Request schema for user login."""
+
+    username: str = Field(..., min_length=3, max_length=50, description="Username")
+    password: str = Field(..., min_length=6, description="Password")
+
+
+class RegisterRequest(BaseModel):
+    """Request schema for user registration."""
+
+    username: str = Field(..., min_length=3, max_length=50, description="Unique username")
+    email: str = Field(..., description="Email address")
+    password: str = Field(..., min_length=6, description="Password (min 6 characters)")
+    full_name: str = Field(..., min_length=1, max_length=255, description="Full name")
+    role: Optional[str] = Field(default="student", description="User role (admin, lecturer, student)")
+
+
+class TokenResponse(BaseModel):
+    """Response schema for authentication token."""
+
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type")
+    user: Dict[str, Any] = Field(..., description="User information")
+
+
+class UserResponse(BaseModel):
+    """Response schema for user information."""
+
+    id: str = Field(..., description="User ID")
+    username: str = Field(..., description="Username")
+    email: str = Field(..., description="Email address")
+    full_name: str = Field(..., description="Full name")
+    role: str = Field(..., description="User role")
+    is_active: bool = Field(..., description="Whether user is active")
+    created_at: datetime = Field(..., description="Account creation timestamp")
