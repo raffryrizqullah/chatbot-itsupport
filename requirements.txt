@@ -40,3 +40,11 @@ slowapi
 
 # Environment & Utils
 python-dotenv
+
+# Testing
+pytest
+pytest-asyncio
+pytest-mock
+pytest-cov
+faker
+aiosqlite
