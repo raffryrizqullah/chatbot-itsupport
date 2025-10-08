@@ -6,7 +6,7 @@ using Pydantic Settings for type safety and validation.
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # PDF Processing Configuration
     pdf_upload_dir: str = "./content"
-    pdf_max_file_size: int = 10 * 1024 * 1024  # 10 MB
+    pdf_max_file_size: int = 10485760  # 10 MB (10 * 1024 * 1024)
     pdf_chunking_strategy: str = "by_title"
     pdf_max_characters: int = 10000
     pdf_combine_text_under_n_chars: int = 2000
@@ -63,10 +63,39 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
 
+    # CORS Configuration
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    cors_allow_credentials: bool = True
+
+    # Rate Limiting Configuration
+    rate_limit_login: str = "5/minute"
+    rate_limit_register: str = "3/hour"
+    rate_limit_query: str = "20/minute"
+    rate_limit_upload: str = "5/hour"
+    rate_limit_api_key_create: str = "10/hour"
+    rate_limit_api_key_list: str = "30/minute"
+    rate_limit_api_key_delete: str = "10/minute"
+    rate_limit_chat_history: str = "30/minute"
+    rate_limit_default: str = "100/minute"
+
+    # API Documentation Configuration
+    enable_docs: bool = True
+    enable_redoc: bool = True
+
+    # Server Configuration
+    server_host: str = "0.0.0.0"
+    server_port: int = 8000
+    server_reload: bool = True
+    server_log_level: str = "info"
+
     # LangSmith (Optional)
     langchain_api_key: Optional[str] = None
     langchain_tracing_v2: bool = False
     langchain_project: Optional[str] = None
+
+    def get_cors_origins(self) -> List[str]:
+        """Parse CORS origins from comma-separated string."""
+        return [origin.strip() for origin in self.cors_origins.split(",")]
 
     model_config = SettingsConfigDict(
         env_file=".env",

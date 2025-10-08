@@ -6,13 +6,14 @@ Handles PDF document uploads, processing, and metadata retrieval.
 
 from typing import List, Union, Optional, Dict, Any
 from functools import lru_cache
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, Request
 from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse
 from app.services.pdf_processor import PDFProcessor
 from app.services.summarizer import SummarizerService
 from app.services.vectorstore import VectorStoreService
 from app.core.config import settings
 from app.core.dependencies import require_role
+from app.core.rate_limit import limiter, RATE_LIMITS
 from app.db.models import UserRole, User
 import uuid
 import os
@@ -199,10 +200,13 @@ async def _process_single_file(
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["upload"])
 async def upload_document(
+    request: Request,
     files: List[UploadFile] = File(...),
     source_links: Optional[List[str]] = Form(None),
     custom_metadata: Optional[str] = Form(None),

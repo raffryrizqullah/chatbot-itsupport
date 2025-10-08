@@ -9,14 +9,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from app.api.routes import health, document, query, chat, auth, api_keys
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.database import init_db, close_db
 import logging
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.server_log_level.upper()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
@@ -53,18 +56,23 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Multi-modal RAG API for PDF document processing and question answering",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.enable_docs else None,
+    redoc_url="/redoc" if settings.enable_redoc else None,
     lifespan=lifespan,
 )
+
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=settings.get_cors_origins(),
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
 )
 
 
@@ -106,8 +114,8 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info",
+        host=settings.server_host,
+        port=settings.server_port,
+        reload=settings.server_reload,
+        log_level=settings.server_log_level,
     )

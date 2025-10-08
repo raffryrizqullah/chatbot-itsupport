@@ -36,6 +36,7 @@ alembic
 # Authentication & Security
 passlib[bcrypt]
 python-jose[cryptography]
+slowapi
 
 # Environment & Utils
 python-dotenv

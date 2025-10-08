@@ -6,7 +6,7 @@ All endpoints require admin authentication.
 """
 
 from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.schemas import (
     APIKeyCreate,
@@ -19,6 +19,7 @@ from app.services import api_key as api_key_service
 from app.db.database import get_db
 from app.db.models import User, UserRole
 from app.core.dependencies import require_role
+from app.core.rate_limit import limiter, RATE_LIMITS
 import logging
 
 router = APIRouter()
@@ -34,11 +35,14 @@ logger = logging.getLogger(__name__)
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["api_key_create"])
 async def create_api_key(
-    request: APIKeyCreate,
+    request: Request,
+    create_request: APIKeyCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> APIKeyCreateResponse:
@@ -48,7 +52,7 @@ async def create_api_key(
     The API key is only shown once in the response. Make sure to save it!
 
     Args:
-        request: API key creation request with user_id and name.
+        create_request: API key creation request with user_id and name.
         db: Database session.
         current_user: Current authenticated admin user.
 
@@ -61,13 +65,13 @@ async def create_api_key(
     try:
         api_key, plain_key = await api_key_service.create_api_key(
             db=db,
-            user_id=request.user_id,
-            name=request.name,
+            user_id=create_request.user_id,
+            name=create_request.name,
             admin_id=str(current_user.id),
         )
 
         logger.info(
-            f"Admin {current_user.username} created API key '{request.name}' for user {request.user_id}"
+            f"Admin {current_user.username} created API key '{create_request.name}' for user {create_request.user_id}"
         )
 
         return APIKeyCreateResponse(
@@ -98,10 +102,13 @@ async def create_api_key(
     dependencies=[Depends(require_role(UserRole.ADMIN))],
     responses={
         403: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["api_key_list"])
 async def list_api_keys(
+    request: Request,
     user_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
@@ -161,10 +168,13 @@ async def list_api_keys(
     responses={
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["api_key_list"])
 async def get_api_key(
+    request: Request,
     key_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
@@ -224,10 +234,13 @@ async def get_api_key(
     responses={
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["api_key_delete"])
 async def revoke_api_key(
+    request: Request,
     key_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
@@ -284,10 +297,13 @@ async def revoke_api_key(
     dependencies=[Depends(require_role(UserRole.ADMIN))],
     responses={
         403: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["api_key_list"])
 async def list_user_api_keys(
+    request: Request,
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),

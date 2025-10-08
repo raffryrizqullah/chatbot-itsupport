@@ -7,7 +7,7 @@ Handles user queries against indexed documents using retrieval-augmented generat
 from typing import Union, Optional, Dict, Any
 from functools import lru_cache
 import uuid
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from app.models.schemas import (
     QueryRequest,
     QueryResponse,
@@ -18,6 +18,7 @@ from app.services.vectorstore import VectorStoreService
 from app.services.rag_chain import RAGChainService
 from app.services.chat_memory import ChatMemoryService
 from app.core.dependencies import get_current_user_flexible
+from app.core.rate_limit import limiter, RATE_LIMITS
 from app.db.models import User, UserRole
 import logging
 
@@ -79,11 +80,14 @@ def build_metadata_filter(user: Optional[User]) -> Optional[Dict[str, Any]]:
     tags=["query"],
     responses={
         400: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["query"])
 async def query_documents(
-    request: QueryRequest,
+    request: Request,
+    query_req: QueryRequest,
     current_user: Optional[User] = Depends(get_current_user_flexible),
 ) -> Union[QueryResponse, QueryWithSourcesResponse]:
     """
@@ -112,10 +116,10 @@ async def query_documents(
         HTTPException: If query processing fails.
     """
     try:
-        logger.info(f"Processing query: {request.question[:50]}...")
+        logger.info(f"Processing query: {query_req.question[:50]}...")
 
         # Get or generate session_id for conversation tracking
-        session_id = request.session_id or f"anon_{uuid.uuid4()}"
+        session_id = query_req.session_id or f"anon_{uuid.uuid4()}"
         logger.info(f"Using session_id: {session_id}")
 
         # Get service instances
@@ -135,22 +139,22 @@ async def query_documents(
             logger.info(f"Anonymous user - Filter: {metadata_filter}")
 
         # Retrieve relevant documents with role-based filtering
-        k = request.top_k if request.top_k is not None else None
-        retrieved_docs = vectorstore.search(request.question, k=k, metadata_filter=metadata_filter)
+        k = query_req.top_k if query_req.top_k is not None else None
+        retrieved_docs = vectorstore.search(query_req.question, k=k, metadata_filter=metadata_filter)
 
         if not retrieved_docs:
             logger.warning("No relevant documents found")
             answer = "I couldn't find any relevant information to answer your question."
 
             # Save to chat history even for no results
-            chat_memory.add_exchange(session_id, request.question, answer)
+            chat_memory.add_exchange(session_id, query_req.question, answer)
 
             return QueryResponse(
                 answer=answer,
                 session_id=session_id,
                 metadata={
                     "num_documents_retrieved": 0,
-                    "include_sources": request.include_sources,
+                    "include_sources": query_req.include_sources,
                     "has_chat_history": len(chat_history) > 0,
                 },
             )
@@ -159,23 +163,23 @@ async def query_documents(
         if chat_history:
             # Use history-aware generation
             result = rag_chain.generate_answer_with_history(
-                request.question, retrieved_docs, chat_history
+                query_req.question, retrieved_docs, chat_history
             )
         else:
             # First message in conversation
-            if request.include_sources:
+            if query_req.include_sources:
                 result = rag_chain.generate_answer_with_sources(
-                    request.question, retrieved_docs
+                    query_req.question, retrieved_docs
                 )
             else:
-                result = rag_chain.generate_answer(request.question, retrieved_docs)
+                result = rag_chain.generate_answer(query_req.question, retrieved_docs)
 
         # Save conversation exchange to Redis
-        chat_memory.add_exchange(session_id, request.question, result["answer"])
+        chat_memory.add_exchange(session_id, query_req.question, result["answer"])
         logger.info(f"Saved conversation exchange to session {session_id}")
 
         # Return response based on include_sources
-        if request.include_sources and "sources" in result:
+        if query_req.include_sources and "sources" in result:
             return QueryWithSourcesResponse(
                 answer=result["answer"],
                 session_id=session_id,

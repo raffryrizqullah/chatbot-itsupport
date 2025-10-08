@@ -4,7 +4,7 @@ Authentication endpoints for user login and registration.
 Provides endpoints for user authentication, registration, and profile management.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.db.models import User, UserRole
@@ -17,6 +17,7 @@ from app.models.schemas import (
 )
 from app.services.auth import login_user, register_user
 from app.core.dependencies import get_current_active_user, require_role
+from app.core.rate_limit import limiter, RATE_LIMITS
 import logging
 
 router = APIRouter()
@@ -29,10 +30,16 @@ logger = logging.getLogger(__name__)
     tags=["auth"],
     responses={
         401: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit(RATE_LIMITS["auth_login"])
+async def login(
+    request: Request,
+    login_req: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
     """
     Login with username and password.
 
@@ -49,9 +56,9 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
         HTTPException: If credentials are invalid.
     """
     try:
-        logger.info(f"Login attempt for user: {request.username}")
+        logger.info(f"Login attempt for user: {login_req.username}")
 
-        result = await login_user(db, request.username, request.password)
+        result = await login_user(db, login_req.username, login_req.password)
 
         if not result:
             raise HTTPException(
@@ -60,7 +67,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        logger.info(f"User {request.username} logged in successfully")
+        logger.info(f"User {login_req.username} logged in successfully")
         return TokenResponse(**result)
 
     except HTTPException:
@@ -82,11 +89,14 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
+@limiter.limit(RATE_LIMITS["auth_register"])
 async def register(
-    request: RegisterRequest,
+    request: Request,
+    register_req: RegisterRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> UserResponse:
@@ -107,24 +117,24 @@ async def register(
         HTTPException: If username/email exists or validation fails.
     """
     try:
-        logger.info(f"Registration attempt for username: {request.username}")
+        logger.info(f"Registration attempt for username: {register_req.username}")
 
         # Validate role
         try:
-            role = UserRole(request.role.lower())
+            role = UserRole(register_req.role.lower())
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid role: {request.role}. Must be: admin, lecturer, or student",
+                detail=f"Invalid role: {register_req.role}. Must be: admin, lecturer, or student",
             )
 
         # Create user
         user = await register_user(
             db=db,
-            username=request.username,
-            email=request.email,
-            password=request.password,
-            full_name=request.full_name,
+            username=register_req.username,
+            email=register_req.email,
+            password=register_req.password,
+            full_name=register_req.full_name,
             role=role,
         )
 

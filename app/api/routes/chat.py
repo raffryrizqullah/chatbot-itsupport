@@ -6,9 +6,10 @@ Provides endpoints for viewing and managing conversation history stored in Redis
 
 from typing import List, Dict, Any
 from functools import lru_cache
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from app.models.schemas import ErrorResponse
 from app.services.chat_memory import ChatMemoryService
+from app.core.rate_limit import limiter, RATE_LIMITS
 from pydantic import BaseModel, Field
 import logging
 
@@ -54,10 +55,12 @@ class ClearHistoryResponse(BaseModel):
     tags=["chat"],
     responses={
         404: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
-async def get_chat_history(session_id: str) -> ChatHistoryResponse:
+@limiter.limit(RATE_LIMITS["chat_history"])
+async def get_chat_history(request: Request, session_id: str) -> ChatHistoryResponse:
     """
     Get chat history for a specific session.
 
@@ -110,10 +113,12 @@ async def get_chat_history(session_id: str) -> ChatHistoryResponse:
     response_model=SessionInfoResponse,
     tags=["chat"],
     responses={
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
-async def get_session_info(session_id: str) -> SessionInfoResponse:
+@limiter.limit(RATE_LIMITS["chat_history"])
+async def get_session_info(request: Request, session_id: str) -> SessionInfoResponse:
     """
     Get information about a chat session.
 
@@ -153,10 +158,12 @@ async def get_session_info(session_id: str) -> SessionInfoResponse:
     response_model=ClearHistoryResponse,
     tags=["chat"],
     responses={
+        429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
     },
 )
-async def clear_chat_history(session_id: str) -> ClearHistoryResponse:
+@limiter.limit(RATE_LIMITS["chat_history"])
+async def clear_chat_history(request: Request, session_id: str) -> ClearHistoryResponse:
     """
     Clear chat history for a specific session.
 
