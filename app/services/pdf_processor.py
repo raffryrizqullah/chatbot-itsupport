@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from unstructured.partition.pdf import partition_pdf
 from unstructured.documents.elements import CompositeElement, Table, Image
 from app.core.config import settings
+from app.core.exceptions import PDFProcessingError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class PDFProcessor:
         except Exception as e:
             msg = f"Failed to process PDF: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise PDFProcessingError(msg)
 
     def _separate_text_and_tables(
         self, chunks: List[Any]

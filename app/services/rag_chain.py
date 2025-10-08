@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
 from app.core.config import settings
+from app.core.exceptions import RAGChainError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ class RAGChainService:
         except Exception as e:
             msg = f"Failed to generate answer with history: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RAGChainError(msg)
 
     def generate_answer(
         self, question: str, retrieved_docs: List[Union[str, Document]]
@@ -120,7 +121,7 @@ class RAGChainService:
         except Exception as e:
             msg = f"Failed to generate answer: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RAGChainError(msg)
 
     def generate_answer_with_sources(
         self, question: str, retrieved_docs: List[Union[str, Document]]
@@ -168,9 +169,11 @@ class RAGChainService:
         except Exception as e:
             msg = f"Failed to generate answer with sources: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RAGChainError(msg)
 
-    def _parse_documents(self, docs: List[Union[str, Document]]) -> Dict[str, List[Any]]:
+    def _parse_documents(
+        self, docs: List[Union[str, Document]]
+    ) -> Dict[str, List[Union[str, Document]]]:
         """
         Separate documents into text and image categories.
 
@@ -179,17 +182,22 @@ class RAGChainService:
 
         Returns:
             Dictionary with ``'texts'`` and ``'images'`` lists.
+            - ``'texts'``: List of Document objects or strings (non-image content)
+            - ``'images'``: List of base64-encoded image strings
         """
-        texts = []
-        images = []
+        texts: List[Union[str, Document]] = []
+        images: List[str] = []
 
         for doc in docs:
+            # Extract string content from Document if needed
+            content = doc.page_content if isinstance(doc, Document) else doc
+
             try:
                 # Try to decode as base64 image
-                b64decode(doc)
-                images.append(doc)
+                b64decode(content)
+                images.append(content)
             except Exception:
-                # If not base64, treat as text
+                # If not base64, treat as text document
                 texts.append(doc)
 
         logger.info(f"Parsed {len(texts)} text docs and {len(images)} image docs")

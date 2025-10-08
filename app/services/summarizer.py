@@ -11,6 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from unstructured.documents.elements import CompositeElement, Table
 from app.core.config import settings
+from app.core.exceptions import SummarizerError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ Table or text chunk: {element}
         except Exception as e:
             msg = f"Failed to summarize texts: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise SummarizerError(msg)
 
     def summarize_tables(self, tables: List[Table]) -> List[str]:
         """
@@ -108,7 +109,7 @@ Table HTML: {element}
         except Exception as e:
             msg = f"Failed to summarize tables: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise SummarizerError(msg)
 
     def summarize_images(self, images: List[str]) -> List[str]:
         """
@@ -153,4 +154,4 @@ Focus on the key information and structure visible in the image."""
         except Exception as e:
             msg = f"Failed to summarize images: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise SummarizerError(msg)

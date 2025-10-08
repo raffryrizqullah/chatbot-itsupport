@@ -7,12 +7,57 @@ retrieved documents across server restarts, replacing InMemoryStore.
 
 from typing import List, Tuple, Any, Optional, Sequence, Iterator
 import redis
-import pickle
+import json
 import logging
 from langchain_core.stores import BaseStore
+from langchain_core.documents import Document
 from app.core.config import settings
+from app.core.exceptions import RedisStoreError
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_to_json(value: Any) -> str:
+    """
+    Safely serialize document to JSON.
+
+    Args:
+        value: Document or string to serialize.
+
+    Returns:
+        JSON string representation.
+    """
+    if isinstance(value, Document):
+        return json.dumps({
+            "_type": "Document",
+            "page_content": value.page_content,
+            "metadata": value.metadata
+        })
+    # Handle other types (strings, base64 images, etc.)
+    return json.dumps({
+        "_type": "str",
+        "data": str(value)
+    })
+
+
+def _deserialize_from_json(json_str: str) -> Any:
+    """
+    Safely deserialize document from JSON.
+
+    Args:
+        json_str: JSON string to deserialize.
+
+    Returns:
+        Deserialized Document or string.
+    """
+    data = json.loads(json_str)
+    if data.get("_type") == "Document":
+        return Document(
+            page_content=data["page_content"],
+            metadata=data["metadata"]
+        )
+    # Return string data for other types
+    return data.get("data", "")
 
 
 class RedisDocStore(BaseStore):
@@ -20,7 +65,7 @@ class RedisDocStore(BaseStore):
     Redis-based document store for RAG pipeline.
 
     Stores original documents (text, tables, images) in Redis using
-    pickle serialization for persistence across application restarts.
+    JSON serialization for safe persistence across application restarts.
     """
 
     def __init__(
@@ -55,7 +100,7 @@ class RedisDocStore(BaseStore):
             port=self.port,
             db=self.db,
             password=self.password,
-            decode_responses=False  # We need bytes for pickle
+            decode_responses=True  # Decode to strings for JSON
         )
 
         # Test connection
@@ -65,7 +110,7 @@ class RedisDocStore(BaseStore):
         except redis.ConnectionError as e:
             msg = f"Failed to connect to Redis: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RedisStoreError(msg)
 
     def _make_key(self, doc_id: str) -> str:
         """
@@ -90,11 +135,11 @@ class RedisDocStore(BaseStore):
             if not key_value_pairs:
                 return
 
-            # Serialize values with pickle and create namespaced keys
+            # Serialize values with JSON and create namespaced keys
             redis_pairs = {}
             for key, value in key_value_pairs:
                 namespaced_key = self._make_key(key)
-                serialized_value = pickle.dumps(value)
+                serialized_value = _serialize_to_json(value)
                 redis_pairs[namespaced_key] = serialized_value
 
             # Store in Redis
@@ -104,7 +149,7 @@ class RedisDocStore(BaseStore):
         except Exception as e:
             msg = f"Failed to store documents in Redis: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RedisStoreError(msg)
 
     def mget(self, keys: Sequence[str]) -> List[Any]:
         """
@@ -130,7 +175,7 @@ class RedisDocStore(BaseStore):
             results = []
             for value in values:
                 if value is not None:
-                    results.append(pickle.loads(value))
+                    results.append(_deserialize_from_json(value))
                 else:
                     results.append(None)
 
@@ -140,7 +185,7 @@ class RedisDocStore(BaseStore):
         except Exception as e:
             msg = f"Failed to retrieve documents from Redis: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RedisStoreError(msg)
 
     def mdelete(self, keys: Sequence[str]) -> None:
         """
@@ -163,7 +208,7 @@ class RedisDocStore(BaseStore):
         except Exception as e:
             msg = f"Failed to delete documents from Redis: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RedisStoreError(msg)
 
     def yield_keys(self, prefix: Optional[str] = None) -> Iterator[str]:
         """
@@ -185,8 +230,8 @@ class RedisDocStore(BaseStore):
             # Scan for keys and yield them
             count = 0
             for key in self.client.scan_iter(match=pattern):
-                # Remove namespace prefix
-                doc_id = key.decode('utf-8').replace(f"{self.namespace}:", "")
+                # Remove namespace prefix (key is already string due to decode_responses=True)
+                doc_id = key.replace(f"{self.namespace}:", "")
                 yield doc_id
                 count += 1
 
@@ -195,7 +240,7 @@ class RedisDocStore(BaseStore):
         except Exception as e:
             msg = f"Failed to retrieve keys from Redis: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RedisStoreError(msg)
 
     def clear(self) -> None:
         """
@@ -215,4 +260,4 @@ class RedisDocStore(BaseStore):
         except Exception as e:
             msg = f"Failed to clear Redis docstore: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise RedisStoreError(msg)

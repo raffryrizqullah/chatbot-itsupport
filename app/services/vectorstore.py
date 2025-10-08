@@ -15,6 +15,7 @@ from langchain.retrievers.multi_vector import MultiVectorRetriever
 from unstructured.documents.elements import CompositeElement, Table
 from app.core.config import settings
 from app.services.redis_store import RedisDocStore
+from app.core.exceptions import VectorStoreError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ class VectorStoreService:
         except Exception as e:
             msg = f"Failed to add documents to vector store: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise VectorStoreError(msg)
 
     def _add_content_type(
         self,
@@ -203,45 +204,68 @@ class VectorStoreService:
         logger.info(f"Added {len(content_ids)} {content_type} items")
         return content_ids
 
-    def search(self, query: str, k: Optional[int] = None) -> List[Union[CompositeElement, Table, str]]:
+    def search(
+        self,
+        query: str,
+        k: Optional[int] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Union[CompositeElement, Table, str]]:
         """
         Search for relevant documents based on query.
 
         Args:
             query: Search query string.
             k: Number of results to return (defaults to settings.rag_top_k).
+            metadata_filter: Optional metadata filter for Pinecone search (e.g., ``{'sensitivity': 'public'}``).
 
         Returns:
             List of retrieved documents (CompositeElement, Table, or base64 image strings).
         """
         try:
+            # Update search kwargs
+            search_kwargs = {}
             if k is not None:
-                self.retriever.search_kwargs = {"k": k}
+                search_kwargs["k"] = k
+            if metadata_filter is not None:
+                search_kwargs["filter"] = metadata_filter
+
+            if search_kwargs:
+                self.retriever.search_kwargs = search_kwargs
 
             results = self.retriever.invoke(query)
-            logger.info(f"Retrieved {len(results)} documents for query: {query[:50]}...")
+            logger.info(
+                f"Retrieved {len(results)} documents for query: {query[:50]}... (filter: {metadata_filter})"
+            )
             return results
 
         except Exception as e:
             msg = f"Search failed: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise VectorStoreError(msg)
 
     def delete_by_document_id(self, document_id: str) -> None:
         """
         Delete all vectors associated with a document ID.
 
+        Note:
+            This method is currently not fully implemented.
+            Pinecone metadata-based deletion requires additional setup
+            with filtering support. Consider implementing this feature
+            based on your Pinecone plan and index configuration.
+
         Args:
             document_id: Document identifier to delete.
+
+        Raises:
+            VectorStoreError: If deletion operation fails.
         """
         try:
-            # Note: Pinecone deletion by metadata requires filter support
-            # This is a simplified implementation
+            # Metadata-based deletion requires Pinecone filter support
             logger.warning(
-                f"Delete operation for document_id {document_id} not fully implemented"
+                f"Delete operation for document_id {document_id} not fully implemented. "
+                f"Metadata-based deletion requires Pinecone filtering configuration."
             )
-            # TODO: Implement metadata-based deletion when available
         except Exception as e:
             msg = f"Failed to delete document: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise VectorStoreError(msg)

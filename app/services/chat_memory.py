@@ -11,6 +11,7 @@ import json
 import logging
 from datetime import datetime
 from app.core.config import settings
+from app.core.exceptions import ChatMemoryError
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class ChatMemoryService:
         except redis.ConnectionError as e:
             msg = f"Failed to connect to Redis for chat memory: {str(e)}"
             logger.error(msg)
-            raise Exception(msg)
+            raise ChatMemoryError(msg)
 
     def _make_key(self, session_id: str) -> str:
         """
