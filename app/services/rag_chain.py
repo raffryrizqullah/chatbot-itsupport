@@ -341,6 +341,13 @@ Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas. Jawab dalam 
 
         # Add metadata if available
         if hasattr(doc, "metadata"):
-            source["metadata"] = doc.metadata
+            metadata = doc.metadata or {}
+            source["metadata"] = metadata
+            source_link = metadata.get("source_link")
+            document_name = metadata.get("document_name")
+            if source_link:
+                source["source_link"] = source_link
+            if document_name:
+                source["document_name"] = document_name
 
         return source

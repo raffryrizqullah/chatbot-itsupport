@@ -5,7 +5,7 @@ This module manages the Pinecone vector database, handling document
 embeddings, storage, and similarity search operations.
 """
 
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Tuple
 import uuid
 from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import OpenAIEmbeddings
@@ -209,7 +209,14 @@ class VectorStoreService:
         query: str,
         k: Optional[int] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
-    ) -> List[Union[CompositeElement, Table, str]]:
+        return_metadata: bool = False,
+    ) -> Union[
+        List[Union[CompositeElement, Table, str, Document]],
+        Tuple[
+            List[Union[CompositeElement, Table, str, Document]],
+            List[Document],
+        ],
+    ]:
         """
         Search for relevant documents based on query.
 
@@ -219,24 +226,56 @@ class VectorStoreService:
             metadata_filter: Optional metadata filter for Pinecone search (e.g., ``{'sensitivity': 'public'}``).
 
         Returns:
-            List of retrieved documents (CompositeElement, Table, or base64 image strings).
+            If ``return_metadata`` is False (default), returns list of retrieved
+            documents (CompositeElement, Table, base64 image strings, or Document fallback).
+
+            If ``return_metadata`` is True, returns a tuple of:
+                - List of retrieved documents (original content when available).
+                - List of summary ``Document`` objects containing metadata.
         """
         try:
-            # Update search kwargs
-            search_kwargs = {}
-            if k is not None:
-                search_kwargs["k"] = k
-            if metadata_filter is not None:
-                search_kwargs["filter"] = metadata_filter
+            # Determine number of results
+            effective_k = k or settings.rag_top_k
 
-            if search_kwargs:
-                self.retriever.search_kwargs = search_kwargs
-
-            results = self.retriever.invoke(query)
-            logger.info(
-                f"Retrieved {len(results)} documents for query: {query[:50]}... (filter: {metadata_filter})"
+            # Retrieve summary documents (with metadata) from vector store
+            summary_docs = self.vectorstore.similarity_search(
+                query,
+                k=effective_k,
+                filter=metadata_filter,
             )
-            return results
+
+            # Collect document IDs to fetch originals from Redis
+            doc_ids: List[Optional[str]] = []
+            fetch_ids: List[str] = []
+            for doc in summary_docs:
+                doc_id = (doc.metadata or {}).get(self.id_key)
+                doc_ids.append(doc_id)
+                if doc_id:
+                    fetch_ids.append(doc_id)
+
+            # Fetch original documents from Redis docstore
+            fetched_docs: Dict[str, Any] = {}
+            if fetch_ids:
+                docstore_results = self.docstore.mget(fetch_ids)
+                fetched_docs = {
+                    doc_id: value
+                    for doc_id, value in zip(fetch_ids, docstore_results)
+                    if value is not None
+                }
+
+            # Build final list of documents, falling back to summary doc if needed
+            retrieved_docs: List[Union[CompositeElement, Table, str, Document]] = []
+            for doc_id, summary_doc in zip(doc_ids, summary_docs):
+                original_doc = fetched_docs.get(doc_id) if doc_id else None
+                retrieved_docs.append(original_doc if original_doc is not None else summary_doc)
+
+            logger.info(
+                f"Retrieved {len(retrieved_docs)} documents for query: {query[:50]}... (filter: {metadata_filter})"
+            )
+
+            if return_metadata:
+                return retrieved_docs, summary_docs
+            return retrieved_docs
 
         except Exception as e:
             msg = f"Search failed: {str(e)}"

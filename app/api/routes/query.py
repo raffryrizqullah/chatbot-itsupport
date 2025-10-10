@@ -140,7 +140,23 @@ async def query_documents(
 
         # Retrieve relevant documents with role-based filtering
         k = query_req.top_k if query_req.top_k is not None else None
-        retrieved_docs = vectorstore.search(query_req.question, k=k, metadata_filter=metadata_filter)
+        retrieved_docs, summary_docs = vectorstore.search(
+            query_req.question,
+            k=k,
+            metadata_filter=metadata_filter,
+            return_metadata=True,
+        )
+        retrieved_documents_metadata = []
+        for summary_doc in summary_docs:
+            doc_metadata = getattr(summary_doc, "metadata", None)
+            if not doc_metadata:
+                continue
+            retrieved_documents_metadata.append({
+                "document_id": doc_metadata.get("document_id"),
+                "document_name": doc_metadata.get("document_name"),
+                "source_link": doc_metadata.get("source_link"),
+                "content_type": doc_metadata.get("content_type"),
+            })
 
         if not retrieved_docs:
             logger.warning("No relevant documents found")
@@ -156,6 +172,7 @@ async def query_documents(
                     "num_documents_retrieved": 0,
                     "include_sources": query_req.include_sources,
                     "has_chat_history": len(chat_history) > 0,
+                    "retrieved_documents": [],
                 },
             )
 
@@ -187,6 +204,7 @@ async def query_documents(
                 metadata={
                     **result["metadata"],
                     "num_documents_retrieved": len(retrieved_docs),
+                    "retrieved_documents": retrieved_documents_metadata,
                 },
             )
         else:
@@ -196,6 +214,7 @@ async def query_documents(
                 metadata={
                     **result.get("context", result.get("metadata", {})),
                     "num_documents_retrieved": len(retrieved_docs),
+                    "retrieved_documents": retrieved_documents_metadata,
                 },
             )
 
