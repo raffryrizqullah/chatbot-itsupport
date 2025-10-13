@@ -51,8 +51,6 @@ class ClearHistoryResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
-<<<<<<< HEAD
-=======
 class SessionListResponse(BaseModel):
     """Response schema for session listing."""
 
@@ -107,7 +105,6 @@ async def list_sessions(
         )
 
 
->>>>>>> bb677be (feat : update logging error)
 @router.get(
     "/history/{session_id}",
     response_model=ChatHistoryResponse,

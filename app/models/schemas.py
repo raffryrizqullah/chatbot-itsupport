@@ -213,8 +213,6 @@ class APIKeyListResponse(BaseModel):
 
     total: int = Field(..., description="Total number of API keys")
     api_keys: List[APIKeyResponse] = Field(..., description="List of API keys")
-<<<<<<< HEAD
-=======
 
 
 class UserListResponse(BaseModel):
@@ -222,4 +220,3 @@ class UserListResponse(BaseModel):
 
     total: int = Field(..., description="Total matched users")
     users: List[UserResponse] = Field(..., description="Users page items")
->>>>>>> bb677be (feat : update logging error)
