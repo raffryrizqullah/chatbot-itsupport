@@ -46,11 +46,6 @@ scripts/
 # Claude Code
 .claude/
 CLAUDE.md
-<<<<<<< HEAD
-=======
-AGENTS.md
-DEPLOYMENT.md
->>>>>>> bb677be (feat : update logging error)
 
 # Logs
 *.log
