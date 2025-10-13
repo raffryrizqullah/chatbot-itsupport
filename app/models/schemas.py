@@ -27,8 +27,6 @@ class HealthResponse(BaseModel):
     version: str = Field(..., description="API version")
 
 
-<<<<<<< HEAD
-=======
 class ServiceHealthResponse(BaseModel):
     """Health response schema for external services (e.g., OpenAI, Pinecone)."""
 
@@ -69,7 +67,6 @@ class DocumentListResponse(BaseModel):
     documents: List[DocumentListItem] = Field(..., description="Per-document aggregated details")
 
 
->>>>>>> bb677be (feat : update logging error)
 class UploadResponse(BaseModel):
     """Response schema for document upload endpoint."""
 

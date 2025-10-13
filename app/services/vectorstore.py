@@ -29,11 +29,7 @@ class VectorStoreService:
     in Pinecone for search, while original content is stored in Redis docstore.
     """
 
-<<<<<<< HEAD
-    def __init__(self):
-=======
     def __init__(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """Initialize Pinecone client, vector store, and Redis docstore."""
         self.pc = Pinecone(api_key=settings.pinecone_api_key)
         self.index_name = settings.pinecone_index_name
@@ -214,10 +210,7 @@ class VectorStoreService:
         k: Optional[int] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
         return_metadata: bool = False,
-<<<<<<< HEAD
-=======
         include_scores: bool = False,
->>>>>>> bb677be (feat : update logging error)
     ) -> Union[
         List[Union[CompositeElement, Table, str, Document]],
         Tuple[
@@ -246,13 +239,6 @@ class VectorStoreService:
             effective_k = k or settings.rag_top_k
 
             # Retrieve summary documents (with metadata) from vector store
-<<<<<<< HEAD
-            summary_docs = self.vectorstore.similarity_search(
-                query,
-                k=effective_k,
-                filter=metadata_filter,
-            )
-=======
             if include_scores:
                 summary_with_scores = self.vectorstore.similarity_search_with_score(
                     query,
@@ -268,7 +254,6 @@ class VectorStoreService:
                     filter=metadata_filter,
                 )
                 scores = None
->>>>>>> bb677be (feat : update logging error)
 
             # Collect document IDs to fetch originals from Redis
             doc_ids: List[Optional[str]] = []
@@ -299,15 +284,12 @@ class VectorStoreService:
                 f"Retrieved {len(retrieved_docs)} documents for query: {query[:50]}... (filter: {metadata_filter})"
             )
 
-<<<<<<< HEAD
-=======
             if include_scores and scores is not None:
                 # Attach scores to metadata for downstream usage
                 for doc, score in zip(summary_docs, scores):
                     doc.metadata = doc.metadata or {}
                     doc.metadata["similarity_score"] = score
 
->>>>>>> bb677be (feat : update logging error)
             if return_metadata:
                 return retrieved_docs, summary_docs
             return retrieved_docs
@@ -335,18 +317,11 @@ class VectorStoreService:
         """
         try:
             # Metadata-based deletion requires Pinecone filter support
-<<<<<<< HEAD
-            logger.warning(
-                f"Delete operation for document_id {document_id} not fully implemented. "
-                f"Metadata-based deletion requires Pinecone filtering configuration."
-            )
-=======
             msg = (
                 f"Delete operation for document_id {document_id} not fully implemented. "
                 f"Metadata-based deletion requires Pinecone filtering configuration."
             )
             logger.warning(msg)
->>>>>>> bb677be (feat : update logging error)
         except Exception as e:
             msg = f"Failed to delete document: {str(e)}"
             logger.error(msg)

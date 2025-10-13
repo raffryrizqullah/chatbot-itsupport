@@ -22,21 +22,13 @@ class CleanupScheduler:
     based on the configured retention period.
     """
 
-<<<<<<< HEAD
-    def __init__(self):
-=======
     def __init__(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """Initialize the cleanup scheduler."""
         self.scheduler = AsyncIOScheduler()
         self.r2_storage = R2StorageService()
         logger.info("Cleanup scheduler initialized")
 
-<<<<<<< HEAD
-    async def cleanup_old_files(self):
-=======
     async def cleanup_old_files(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """
         Execute cleanup of old files from R2 storage.
 
@@ -52,16 +44,10 @@ class CleanupScheduler:
                 f"Scheduled cleanup completed: {deleted_count} files deleted"
             )
         except Exception as e:
-<<<<<<< HEAD
-            logger.error(f"Scheduled cleanup failed: {str(e)}", exc_info=True)
-
-    def start(self):
-=======
             msg = f"Scheduled cleanup failed: {str(e)}"
             logger.error(msg, exc_info=True)
 
     def start(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """
         Start the cleanup scheduler.
 
@@ -79,11 +65,7 @@ class CleanupScheduler:
         self.scheduler.start()
         logger.info("Cleanup scheduler started (runs daily at 2:00 AM UTC)")
 
-<<<<<<< HEAD
-    def shutdown(self):
-=======
     def shutdown(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """
         Shutdown the cleanup scheduler.
 
@@ -111,21 +93,13 @@ def get_scheduler() -> CleanupScheduler:
     return _scheduler_instance
 
 
-<<<<<<< HEAD
-async def start_scheduler():
-=======
 async def start_scheduler() -> None:
->>>>>>> bb677be (feat : update logging error)
     """Start the global cleanup scheduler."""
     scheduler = get_scheduler()
     scheduler.start()
 
 
-<<<<<<< HEAD
-async def stop_scheduler():
-=======
 async def stop_scheduler() -> None:
->>>>>>> bb677be (feat : update logging error)
     """Stop the global cleanup scheduler."""
     global _scheduler_instance
     if _scheduler_instance is not None:

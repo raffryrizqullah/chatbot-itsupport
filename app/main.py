@@ -5,10 +5,7 @@ This module initializes the FastAPI app with all routes, middleware,
 and error handlers.
 """
 
-<<<<<<< HEAD
-=======
 from collections.abc import AsyncIterator
->>>>>>> bb677be (feat : update logging error)
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -32,11 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-<<<<<<< HEAD
-async def lifespan(app: FastAPI):
-=======
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
->>>>>>> bb677be (feat : update logging error)
     """
     Lifespan context manager for application startup and shutdown.
 
@@ -90,11 +83,7 @@ app.add_middleware(
 
 # Exception handlers
 @app.exception_handler(Exception)
-<<<<<<< HEAD
-async def global_exception_handler(request: Request, exc: Exception):
-=======
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
->>>>>>> bb677be (feat : update logging error)
     """
     Global exception handler for unhandled exceptions.
 
@@ -105,12 +94,8 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     Returns:
         JSON response with error details.
     """
-<<<<<<< HEAD
-    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
-=======
     msg = f"Unhandled exception: {str(exc)}"
     logger.error(msg, exc_info=True)
->>>>>>> bb677be (feat : update logging error)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

@@ -7,10 +7,7 @@ using Pydantic Settings for type safety and validation.
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional, List
-<<<<<<< HEAD
-=======
 from urllib.parse import quote_plus, urlsplit, urlunsplit
->>>>>>> bb677be (feat : update logging error)
 
 
 class Settings(BaseSettings):
@@ -46,13 +43,10 @@ class Settings(BaseSettings):
     pdf_new_after_n_chars: int = 6000
     pdf_retention_days: int = 7  # Auto-delete files older than this
 
-<<<<<<< HEAD
-=======
     # OCR / Tesseract Configuration
     # Comma or plus-separated language codes (e.g., "eng", "ind", "eng+ind")
     ocr_languages: str = "eng"
 
->>>>>>> bb677be (feat : update logging error)
     # Cloudflare R2 Storage Configuration
     r2_account_id: str
     r2_access_key_id: str
@@ -74,13 +68,10 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: Optional[str] = None
 
-<<<<<<< HEAD
-=======
     # Rate limiter storage configuration (shared backend)
     rate_limit_storage_uri: Optional[str] = None
     rate_limit_storage_db: int = 1
 
->>>>>>> bb677be (feat : update logging error)
     # Chat Memory Configuration
     chat_history_ttl: int = 7200  # 2 hours in seconds
     chat_max_messages: int = 10  # Keep last 10 messages per session
@@ -127,8 +118,6 @@ class Settings(BaseSettings):
         """Parse CORS origins from comma-separated string."""
         return [origin.strip() for origin in self.cors_origins.split(",")]
 
-<<<<<<< HEAD
-=======
     def get_rate_limit_storage_uri(self) -> str:
         """
         Build storage URI for the rate limiter.
@@ -171,7 +160,6 @@ class Settings(BaseSettings):
             auth = f":{quote_plus(password)}@"
         return f"redis://{auth}{host}:{port}/{db}"
 
->>>>>>> bb677be (feat : update logging error)
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

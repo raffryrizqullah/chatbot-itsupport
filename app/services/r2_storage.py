@@ -25,11 +25,7 @@ class R2StorageService:
     and automatic cleanup of files older than retention period.
     """
 
-<<<<<<< HEAD
-    def __init__(self):
-=======
     def __init__(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """Initialize R2 storage client with configuration from settings."""
         try:
             self.client = boto3.client(
@@ -156,12 +152,8 @@ class R2StorageService:
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 return False
-<<<<<<< HEAD
-            logger.error(f"Error checking file existence: {str(e)}")
-=======
             msg = f"Error checking file existence: {str(e)}"
             logger.error(msg)
->>>>>>> bb677be (feat : update logging error)
             return False
 
     def delete_old_files(self, retention_days: Optional[int] = None) -> int:
@@ -203,12 +195,8 @@ class R2StorageService:
                             self.delete_file(obj["Key"])
                             deleted_count += 1
                         except StorageError as e:
-<<<<<<< HEAD
-                            logger.error(f"Failed to delete old file {obj['Key']}: {e}")
-=======
                             msg = f"Failed to delete old file {obj['Key']}: {e}"
                             logger.error(msg)
->>>>>>> bb677be (feat : update logging error)
                             continue
 
             logger.info(
@@ -244,10 +232,6 @@ class R2StorageService:
             return url
 
         except ClientError as e:
-<<<<<<< HEAD
-            logger.error(f"Failed to generate presigned URL: {str(e)}")
-=======
             msg = f"Failed to generate presigned URL: {str(e)}"
             logger.error(msg)
->>>>>>> bb677be (feat : update logging error)
             return None

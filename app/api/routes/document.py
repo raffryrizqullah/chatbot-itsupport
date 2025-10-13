@@ -7,21 +7,13 @@ Handles PDF document uploads, processing, and metadata retrieval.
 from typing import List, Union, Optional, Dict, Any
 from functools import lru_cache
 from io import BytesIO
-<<<<<<< HEAD
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, Request
-from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse
-=======
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, Request, Query
 from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse, DocumentListResponse, DocumentListItem
->>>>>>> bb677be (feat : update logging error)
 from app.services.pdf_processor import PDFProcessor
 from app.services.summarizer import SummarizerService
 from app.services.vectorstore import VectorStoreService
 from app.services.r2_storage import R2StorageService
-<<<<<<< HEAD
-=======
 from app.utils.strings import to_document_name
->>>>>>> bb677be (feat : update logging error)
 from app.core.config import settings
 from app.core.dependencies import require_role
 from app.core.rate_limit import limiter, RATE_LIMITS
@@ -183,15 +175,12 @@ async def _process_single_file(
     image_summaries = summarizer.summarize_images(extracted_content.images)
 
     # Add to vector store with source_link and custom_metadata
-<<<<<<< HEAD
-=======
     # Ensure document_name stored in metadata for listing (auto-generated per file)
     enriched_metadata = dict(metadata_dict or {})
     auto_name = to_document_name(file.filename)
     # Respect user-provided document_name in custom_metadata; otherwise use auto_name
     enriched_metadata.setdefault("document_name", auto_name)
 
->>>>>>> bb677be (feat : update logging error)
     counts = vectorstore.add_documents(
         text_chunks=extracted_content.texts,
         text_summaries=text_summaries,
@@ -201,11 +190,7 @@ async def _process_single_file(
         image_summaries=image_summaries,
         document_id=document_id,
         source_link=source_link,
-<<<<<<< HEAD
-        custom_metadata=metadata_dict,
-=======
         custom_metadata=enriched_metadata,
->>>>>>> bb677be (feat : update logging error)
     )
 
     logger.info(f"Document {document_id} processed successfully")
@@ -215,11 +200,7 @@ async def _process_single_file(
         document_id=document_id,
         filename=file.filename,
         source_link=source_link,
-<<<<<<< HEAD
-        custom_metadata=metadata_dict,
-=======
         custom_metadata=enriched_metadata,
->>>>>>> bb677be (feat : update logging error)
         status="completed",
         metadata={
             "num_texts": counts["texts"],
@@ -305,10 +286,7 @@ async def upload_document(
 
         except HTTPException as e:
             # Create error response for this file
-<<<<<<< HEAD
-=======
             msg = f"Failed to process {file.filename}: {e.detail}"
->>>>>>> bb677be (feat : update logging error)
             result = UploadResponse(
                 document_id="",
                 filename=file.filename,
@@ -320,19 +298,11 @@ async def upload_document(
             )
             results.append(result)
             failed += 1
-<<<<<<< HEAD
-            logger.error(f"Failed to process {file.filename}: {e.detail}")
-
-        except Exception as e:
-            # Create error response for this file
-            msg = f"Failed to process document: {str(e)}"
-=======
             logger.error(msg)
 
         except Exception as e:
             # Create error response for this file
             msg = f"Failed to process {file.filename}: {str(e)}"
->>>>>>> bb677be (feat : update logging error)
             result = UploadResponse(
                 document_id="",
                 filename=file.filename,
@@ -344,11 +314,7 @@ async def upload_document(
             )
             results.append(result)
             failed += 1
-<<<<<<< HEAD
-            logger.error(f"Failed to process {file.filename}: {msg}")
-=======
             logger.error(msg)
->>>>>>> bb677be (feat : update logging error)
 
     # Return single result or batch result
     if len(files) == 1:
@@ -363,8 +329,6 @@ async def upload_document(
             results=results,
             message=f"Processed {successful} of {len(files)} documents successfully",
         )
-<<<<<<< HEAD
-=======
 
 
 @router.get(
@@ -516,4 +480,3 @@ async def list_documents(
         msg = f"Failed to list documents: {e}"
         logger.error(msg)
         raise HTTPException(status_code=500, detail=f"Failed to list documents: {e}")
->>>>>>> bb677be (feat : update logging error)

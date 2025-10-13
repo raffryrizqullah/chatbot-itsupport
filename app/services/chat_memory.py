@@ -30,11 +30,7 @@ class ChatMemoryService:
         port: Optional[int] = None,
         db: Optional[int] = None,
         password: Optional[str] = None,
-<<<<<<< HEAD
-    ):
-=======
     ) -> None:
->>>>>>> bb677be (feat : update logging error)
         """
         Initialize chat memory service.
 
@@ -222,8 +218,6 @@ class ChatMemoryService:
             logger.error(msg)
             return False
 
-<<<<<<< HEAD
-=======
     def list_sessions(self, limit: Optional[int] = None) -> List[str]:
         """
         List chat session identifiers stored in Redis.
@@ -255,7 +249,6 @@ class ChatMemoryService:
             logger.error(msg)
             return []
 
->>>>>>> bb677be (feat : update logging error)
     def _trim_history(self, history: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """
         Trim history to keep only last N messages.
@@ -308,10 +301,6 @@ class ChatMemoryService:
             }
 
         except Exception as e:
-<<<<<<< HEAD
-            logger.error(f"Failed to get session info for {session_id}: {str(e)}")
-=======
             msg = f"Failed to get session info for {session_id}: {str(e)}"
             logger.error(msg)
->>>>>>> bb677be (feat : update logging error)
             return {"exists": False, "message_count": 0, "ttl": None}

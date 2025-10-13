@@ -5,11 +5,7 @@ This module provides reusable dependencies for API endpoints including
 authentication and authorization via JWT tokens and API keys.
 """
 
-<<<<<<< HEAD
-from typing import Optional
-=======
 from typing import Optional, Callable, Awaitable
->>>>>>> bb677be (feat : update logging error)
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,11 +13,7 @@ from sqlalchemy import select
 from app.db.database import get_db
 from app.db.models import User, UserRole
 from app.core.security import decode_access_token
-<<<<<<< HEAD
-from app.core.config import settings
-=======
 from app.core.config import settings, Settings
->>>>>>> bb677be (feat : update logging error)
 from app.services.api_key import verify_api_key
 import logging
 
@@ -31,11 +23,7 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
-<<<<<<< HEAD
-def get_settings():
-=======
 def get_settings() -> Settings:
->>>>>>> bb677be (feat : update logging error)
     """
     Get application settings.
 
@@ -208,11 +196,7 @@ async def get_current_user_flexible(
     return user
 
 
-<<<<<<< HEAD
-def require_role(*allowed_roles: UserRole):
-=======
 def require_role(*allowed_roles: UserRole) -> Callable[[User], Awaitable[User]]:
->>>>>>> bb677be (feat : update logging error)
     """
     Dependency factory for requiring specific user roles.
 

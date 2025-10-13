@@ -4,14 +4,6 @@ Chat history management endpoints.
 Provides endpoints for viewing and managing conversation history stored in Redis.
 """
 
-<<<<<<< HEAD
-from typing import List, Dict, Any
-from functools import lru_cache
-from fastapi import APIRouter, HTTPException, status, Request
-from app.models.schemas import ErrorResponse
-from app.services.chat_memory import ChatMemoryService
-from app.core.rate_limit import limiter, RATE_LIMITS
-=======
 from typing import List, Dict, Any, Optional
 from functools import lru_cache
 from fastapi import APIRouter, HTTPException, status, Request, Depends, Query
@@ -20,7 +12,6 @@ from app.services.chat_memory import ChatMemoryService
 from app.core.rate_limit import limiter, RATE_LIMITS
 from app.core.dependencies import require_role
 from app.db.models import UserRole
->>>>>>> bb677be (feat : update logging error)
 from pydantic import BaseModel, Field
 import logging
 

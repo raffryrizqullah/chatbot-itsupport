@@ -4,14 +4,6 @@ Health check and welcome endpoints.
 Provides health check endpoint and root welcome message.
 """
 
-<<<<<<< HEAD
-from fastapi import APIRouter, Request
-from app.models.schemas import HealthResponse, WelcomeResponse
-from app.core.config import settings
-from datetime import datetime
-
-router = APIRouter()
-=======
 from fastapi import APIRouter, Request, Query
 from app.models.schemas import HealthResponse, WelcomeResponse, ServiceHealthResponse, HealthSummaryResponse
 from app.core.config import settings
@@ -25,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 STARTED_AT = datetime.utcnow()
->>>>>>> bb677be (feat : update logging error)
 
 
 @router.get("/", response_model=WelcomeResponse, tags=["root"])
@@ -60,8 +51,6 @@ async def health_check() -> HealthResponse:
         timestamp=datetime.utcnow(),
         version=settings.app_version,
     )
-<<<<<<< HEAD
-=======
 
 
 @router.get("/api/v1/health/openai", response_model=ServiceHealthResponse, tags=["health"])
@@ -464,4 +453,3 @@ async def health_summary(deep: bool = Query(False, description="Run live checks 
         version=settings.app_version,
         services=services,
     )
->>>>>>> bb677be (feat : update logging error)

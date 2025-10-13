@@ -5,14 +5,6 @@ This module provides rate limiting functionality using SlowAPI to prevent
 abuse and ensure fair resource usage across all users.
 """
 
-<<<<<<< HEAD
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from app.core.config import settings
-
-# Initialize limiter with remote address as key
-limiter = Limiter(key_func=get_remote_address)
-=======
 from hashlib import sha256
 from typing import Optional
 from fastapi import Request
@@ -72,7 +64,6 @@ limiter = Limiter(
     key_func=rate_limit_key_func,
     storage_uri=_storage_uri,
 )
->>>>>>> bb677be (feat : update logging error)
 
 
 def get_rate_limits() -> dict:

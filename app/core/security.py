@@ -111,10 +111,6 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
         )
         return payload
     except JWTError as e:
-<<<<<<< HEAD
-        logger.warning(f"Failed to decode token: {str(e)}")
-=======
         msg = f"Failed to decode token: {str(e)}"
         logger.warning(msg)
->>>>>>> bb677be (feat : update logging error)
         return None

@@ -34,18 +34,12 @@ class PDFProcessor:
     unstructured library with high-resolution strategy.
     """
 
-<<<<<<< HEAD
-    def __init__(self):
-=======
     def __init__(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """Initialize PDF processor with configuration from settings."""
         self.chunking_strategy = settings.pdf_chunking_strategy
         self.max_characters = settings.pdf_max_characters
         self.combine_text_under_n_chars = settings.pdf_combine_text_under_n_chars
         self.new_after_n_chars = settings.pdf_new_after_n_chars
-<<<<<<< HEAD
-=======
         # OCR languages for Tesseract (e.g., "eng", "ind", "eng+ind"). Must be a list for unstructured
         # Accept comma or plus separated values in .env and normalize to List[str]
         try:
@@ -57,7 +51,6 @@ class PDFProcessor:
         except Exception:
             # Fallback to English if parsing fails
             self.ocr_languages = ["eng"]
->>>>>>> bb677be (feat : update logging error)
 
     def process_pdf(self, file_path: str) -> ExtractedContent:
         """
@@ -86,10 +79,7 @@ class PDFProcessor:
                 max_characters=self.max_characters,
                 combine_text_under_n_chars=self.combine_text_under_n_chars,
                 new_after_n_chars=self.new_after_n_chars,
-<<<<<<< HEAD
-=======
                 languages=self.ocr_languages,
->>>>>>> bb677be (feat : update logging error)
             )
 
             # Separate elements by type
@@ -138,10 +128,7 @@ class PDFProcessor:
                 max_characters=self.max_characters,
                 combine_text_under_n_chars=self.combine_text_under_n_chars,
                 new_after_n_chars=self.new_after_n_chars,
-<<<<<<< HEAD
-=======
                 languages=self.ocr_languages,
->>>>>>> bb677be (feat : update logging error)
             )
 
             # Separate elements by type

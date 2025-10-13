@@ -27,11 +27,7 @@ class RAGChainService:
     to generate answers based on multi-modal context.
     """
 
-<<<<<<< HEAD
-    def __init__(self):
-=======
     def __init__(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """Initialize RAG chain with GPT-4o-mini model."""
         self.model = ChatOpenAI(
             model=settings.openai_model,
@@ -258,19 +254,6 @@ class RAGChainService:
         # Build system message with instructions
         system_message = SystemMessage(
             content="""Anda adalah asisten IT support. Jawab pertanyaan berdasarkan konteks yang diberikan dan riwayat percakapan.
-<<<<<<< HEAD
-Jika pertanyaan merujuk ke percakapan sebelumnya (menggunakan kata seperti 'itu', 'tersebut', 'ini'), gunakan riwayat chat untuk memahami yang dimaksud pengguna.
-Berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia."""
-        )
-
-        # Build prompt content with context
-        prompt_text = f"""Konteks dari knowledge base:
-{context_text}
-
-Pertanyaan saat ini: {question}
-
-Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas dan riwayat percakapan. Jawab dalam bahasa Indonesia."""
-=======
             Jika pertanyaan merujuk ke percakapan sebelumnya (menggunakan kata seperti 'itu', 'tersebut', 'ini'), gunakan riwayat chat untuk memahami yang dimaksud pengguna.
             Berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia."""
                     )
@@ -282,7 +265,6 @@ Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas dan riwayat p
         Pertanyaan saat ini: {question}
 
         Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas dan riwayat percakapan. Jawab dalam bahasa Indonesia."""
->>>>>>> bb677be (feat : update logging error)
 
         prompt_content = [{"type": "text", "text": prompt_text}]
 
@@ -322,21 +304,12 @@ Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas dan riwayat p
         # Build prompt template
         prompt_text = f"""Jawab pertanyaan hanya berdasarkan konteks berikut, yang dapat berisi teks, tabel, dan gambar.
 
-<<<<<<< HEAD
-Konteks:
-{context_text}
-
-Pertanyaan: {question}
-
-Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas. Jawab dalam bahasa Indonesia."""
-=======
         Konteks:
         {context_text}
 
         Pertanyaan: {question}
 
         Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas. Jawab dalam bahasa Indonesia."""
->>>>>>> bb677be (feat : update logging error)
 
         prompt_content = [{"type": "text", "text": prompt_text}]
 

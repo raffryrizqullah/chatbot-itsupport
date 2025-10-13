@@ -4,11 +4,7 @@ Query endpoints for RAG-based question answering.
 Handles user queries against indexed documents using retrieval-augmented generation.
 """
 
-<<<<<<< HEAD
-from typing import Union, Optional, Dict, Any
-=======
 from typing import Union, Optional, Dict, Any, List
->>>>>>> bb677be (feat : update logging error)
 from functools import lru_cache
 import uuid
 from fastapi import APIRouter, HTTPException, status, Depends, Request
@@ -24,10 +20,7 @@ from app.services.chat_memory import ChatMemoryService
 from app.core.dependencies import get_current_user_flexible
 from app.core.rate_limit import limiter, RATE_LIMITS
 from app.db.models import User, UserRole
-<<<<<<< HEAD
-=======
 from app.utils.intent import is_smalltalk, wants_sources
->>>>>>> bb677be (feat : update logging error)
 import logging
 
 router = APIRouter()
@@ -153,30 +146,14 @@ async def query_documents(
             k=k,
             metadata_filter=metadata_filter,
             return_metadata=True,
-<<<<<<< HEAD
-        )
-        retrieved_documents_metadata = []
-=======
             include_scores=True,
         )
         retrieved_documents_metadata = []
         similarity_scores: List[float] = []
->>>>>>> bb677be (feat : update logging error)
         for summary_doc in summary_docs:
             doc_metadata = getattr(summary_doc, "metadata", None)
             if not doc_metadata:
                 continue
-<<<<<<< HEAD
-            retrieved_documents_metadata.append({
-                "document_id": doc_metadata.get("document_id"),
-                "document_name": doc_metadata.get("document_name"),
-                "source_link": doc_metadata.get("source_link"),
-                "content_type": doc_metadata.get("content_type"),
-            })
-
-        if not retrieved_docs:
-            logger.warning("No relevant documents found")
-=======
             score = doc_metadata.get("similarity_score")
             if isinstance(score, (int, float)):
                 similarity_scores.append(score)
@@ -202,7 +179,6 @@ async def query_documents(
         if not retrieved_docs:
             msg = "No relevant documents found"
             logger.warning(msg)
->>>>>>> bb677be (feat : update logging error)
             answer = "I couldn't find any relevant information to answer your question."
 
             # Save to chat history even for no results
@@ -216,10 +192,7 @@ async def query_documents(
                     "include_sources": query_req.include_sources,
                     "has_chat_history": len(chat_history) > 0,
                     "retrieved_documents": [],
-<<<<<<< HEAD
-=======
                     "similarity_scores": [],
->>>>>>> bb677be (feat : update logging error)
                 },
             )
 
@@ -238,8 +211,6 @@ async def query_documents(
             else:
                 result = rag_chain.generate_answer(query_req.question, retrieved_docs)
 
-<<<<<<< HEAD
-=======
         # Decide whether to append sources inline in the answer text
         add_sources = (query_req.include_sources or wants_sources(query_req.question)) and not is_smalltalk(query_req.question)
 
@@ -248,13 +219,10 @@ async def query_documents(
             sources_block = "\n\nSumber:\n" + "\n".join([f"- {link}" for link in source_links])
             result["answer"] = f"{result['answer']}{sources_block}"
 
->>>>>>> bb677be (feat : update logging error)
         # Save conversation exchange to Redis
         chat_memory.add_exchange(session_id, query_req.question, result["answer"])
         logger.info(f"Saved conversation exchange to session {session_id}")
 
-<<<<<<< HEAD
-=======
         score_summary: Dict[str, Any] = {
             "similarity_scores": similarity_scores,
         }
@@ -267,7 +235,6 @@ async def query_documents(
                 }
             )
 
->>>>>>> bb677be (feat : update logging error)
         # Return response based on include_sources
         if query_req.include_sources and "sources" in result:
             return QueryWithSourcesResponse(
@@ -278,11 +245,8 @@ async def query_documents(
                     **result["metadata"],
                     "num_documents_retrieved": len(retrieved_docs),
                     "retrieved_documents": retrieved_documents_metadata,
-<<<<<<< HEAD
-=======
                     "source_links": source_links,
                     **score_summary,
->>>>>>> bb677be (feat : update logging error)
                 },
             )
         else:
@@ -293,11 +257,8 @@ async def query_documents(
                     **result.get("context", result.get("metadata", {})),
                     "num_documents_retrieved": len(retrieved_docs),
                     "retrieved_documents": retrieved_documents_metadata,
-<<<<<<< HEAD
-=======
                     "source_links": source_links,
                     **score_summary,
->>>>>>> bb677be (feat : update logging error)
                 },
             )
 

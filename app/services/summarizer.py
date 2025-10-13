@@ -25,11 +25,7 @@ class SummarizerService:
     multi-modal (image) summarization.
     """
 
-<<<<<<< HEAD
-    def __init__(self):
-=======
     def __init__(self) -> None:
->>>>>>> bb677be (feat : update logging error)
         """Initialize summarizer with GPT-4o-mini model."""
         self.model = ChatOpenAI(
             model=settings.openai_model,

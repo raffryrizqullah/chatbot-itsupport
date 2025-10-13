@@ -5,26 +5,17 @@ Provides endpoints for creating, listing, and revoking API keys.
 All endpoints require admin authentication.
 """
 
-<<<<<<< HEAD
-from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-=======
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, status, Depends, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
->>>>>>> bb677be (feat : update logging error)
 from app.models.schemas import (
     APIKeyCreate,
     APIKeyCreateResponse,
     APIKeyResponse,
     APIKeyListResponse,
-<<<<<<< HEAD
-=======
     UserListResponse,
     UserResponse,
->>>>>>> bb677be (feat : update logging error)
     ErrorResponse,
 )
 from app.services import api_key as api_key_service
@@ -367,8 +358,6 @@ async def list_user_api_keys(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=msg,
         )
-<<<<<<< HEAD
-=======
 
 
 @router.get(
@@ -478,4 +467,3 @@ async def list_users(
         msg = f"Failed to list users: {str(e)}"
         logger.error(msg)
         raise HTTPException(status_code=500, detail=msg)
->>>>>>> bb677be (feat : update logging error)

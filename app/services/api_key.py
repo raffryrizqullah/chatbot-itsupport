@@ -151,12 +151,8 @@ async def verify_api_key(db: AsyncSession, api_key: str) -> Optional[User]:
                 )
                 return user
 
-<<<<<<< HEAD
-    logger.warning("Invalid or inactive API key attempted")
-=======
     msg = "Invalid or inactive API key attempted"
     logger.warning(msg)
->>>>>>> bb677be (feat : update logging error)
     return None
 
 
