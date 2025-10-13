@@ -5,14 +5,26 @@ Provides endpoints for creating, listing, and revoking API keys.
 All endpoints require admin authentication.
 """
 
+<<<<<<< HEAD
 from typing import Optional
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+=======
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_, func
+>>>>>>> bb677be (feat : update logging error)
 from app.models.schemas import (
     APIKeyCreate,
     APIKeyCreateResponse,
     APIKeyResponse,
     APIKeyListResponse,
+<<<<<<< HEAD
+=======
+    UserListResponse,
+    UserResponse,
+>>>>>>> bb677be (feat : update logging error)
     ErrorResponse,
 )
 from app.services import api_key as api_key_service
@@ -355,3 +367,115 @@ async def list_user_api_keys(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=msg,
         )
+<<<<<<< HEAD
+=======
+
+
+@router.get(
+    "/users",
+    response_model=UserListResponse,
+    tags=["admin", "users"],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    responses={
+        403: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+@limiter.limit(RATE_LIMITS["default"])
+async def list_users(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    search: Optional[str] = Query(None, description="Search by username/email/full_name (case-insensitive)"),
+    role: Optional[str] = Query(None, description="Filter by role: admin|lecturer|student"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    limit: int = Query(50, ge=1, le=200, description="Page size (1-200)"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+) -> UserListResponse:
+    """
+    List users with optional search, role, and active filters (Admin only).
+
+    Supports pagination via limit/offset.
+    """
+    try:
+        stmt = select(User)
+
+        # Filters
+        if search:
+            pattern = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    User.username.ilike(pattern),
+                    User.email.ilike(pattern),
+                    User.full_name.ilike(pattern),
+                )
+            )
+
+        if role:
+            try:
+                role_enum = UserRole(role.lower())
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+            stmt = stmt.where(User.role == role_enum)
+
+        if is_active is not None:
+            stmt = stmt.where(User.is_active == is_active)
+
+        # Total count
+        count_stmt = select(func.count()).select_from(User)
+        if search or role or is_active is not None:
+            # Re-apply filters to count
+            filters = []
+            if search:
+                pattern = f"%{search}%"
+                filters.append(
+                    or_(
+                        User.username.ilike(pattern),
+                        User.email.ilike(pattern),
+                        User.full_name.ilike(pattern),
+                    )
+                )
+            if role:
+                filters.append(User.role == role_enum)
+            if is_active is not None:
+                filters.append(User.is_active == is_active)
+            for f in filters:
+                count_stmt = count_stmt.where(f)
+
+        # Apply pagination
+        stmt = stmt.offset(offset).limit(limit)
+
+        # Execute
+        result = await db.execute(stmt)
+        users: List[User] = result.scalars().all()
+
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        items: List[UserResponse] = [
+            UserResponse(
+                id=str(u.id),
+                username=u.username,
+                email=u.email,
+                full_name=u.full_name,
+                role=u.role.value,
+                is_active=u.is_active,
+                created_at=u.created_at,
+            )
+            for u in users
+        ]
+
+        logger.info(
+            f"Admin {current_user.username} listed users: count={len(items)} total={total} offset={offset} limit={limit}"
+        )
+
+        return UserListResponse(total=total, users=items)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = f"Failed to list users: {str(e)}"
+        logger.error(msg)
+        raise HTTPException(status_code=500, detail=msg)
+>>>>>>> bb677be (feat : update logging error)

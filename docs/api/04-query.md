@@ -103,7 +103,24 @@ Content-Type: application/json
     "num_documents_retrieved": 4,
     "has_chat_history": false,
     "model": "gpt-4o-mini",
+<<<<<<< HEAD
     "total_tokens": 456
+=======
+    "total_tokens": 456,
+    "retrieved_documents": [
+      {
+        "document_id": "123e4567-e89b-12d3-a456-426614174000",
+        "document_name": "rag_overview.pdf",
+        "content_type": "text",
+        "source_link": "https://university.edu/courses/ai101/rag.pdf",
+        "similarity_score": 0.93
+      }
+    ],
+    "similarity_scores": [0.93, 0.88, 0.85, 0.81],
+    "max_similarity_score": 0.93,
+    "min_similarity_score": 0.81,
+    "avg_similarity_score": 0.8675
+>>>>>>> bb677be (feat : update logging error)
   }
 }
 ```
@@ -121,7 +138,12 @@ Content-Type: application/json
           "document_id": "123e4567-e89b-12d3-a456-426614174000",
           "content_type": "text",
           "sensitivity": "public",
+<<<<<<< HEAD
           "source_link": "https://university.edu/courses/ai101/rag.pdf"
+=======
+          "source_link": "https://university.edu/courses/ai101/rag.pdf",
+          "similarity_score": 0.93
+>>>>>>> bb677be (feat : update logging error)
         }
       }
     ],
@@ -130,7 +152,27 @@ Content-Type: application/json
   "metadata": {
     "num_documents_retrieved": 4,
     "has_chat_history": false,
+<<<<<<< HEAD
     "model": "gpt-4o-mini"
+=======
+    "model": "gpt-4o-mini",
+    "retrieved_documents": [
+      {
+        "document_id": "123e4567-e89b-12d3-a456-426614174000",
+        "document_name": "rag_overview.pdf",
+        "content_type": "text",
+        "source_link": "https://university.edu/courses/ai101/rag.pdf",
+        "similarity_score": 0.93
+      }
+    ],
+    "similarity_scores": [0.93, 0.88, 0.85, 0.81],
+    "max_similarity_score": 0.93,
+    "min_similarity_score": 0.81,
+    "avg_similarity_score": 0.8675,
+    "source_links": [
+      "https://university.edu/courses/ai101/rag.pdf"
+    ]
+>>>>>>> bb677be (feat : update logging error)
   }
 }
 ```
@@ -143,7 +185,13 @@ Content-Type: application/json
   "metadata": {
     "num_documents_retrieved": 0,
     "include_sources": false,
+<<<<<<< HEAD
     "has_chat_history": false
+=======
+    "has_chat_history": false,
+    "retrieved_documents": [],
+    "similarity_scores": []
+>>>>>>> bb677be (feat : update logging error)
   }
 }
 ```

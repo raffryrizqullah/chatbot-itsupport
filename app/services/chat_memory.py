@@ -30,7 +30,11 @@ class ChatMemoryService:
         port: Optional[int] = None,
         db: Optional[int] = None,
         password: Optional[str] = None,
+<<<<<<< HEAD
     ):
+=======
+    ) -> None:
+>>>>>>> bb677be (feat : update logging error)
         """
         Initialize chat memory service.
 
@@ -218,6 +222,40 @@ class ChatMemoryService:
             logger.error(msg)
             return False
 
+<<<<<<< HEAD
+=======
+    def list_sessions(self, limit: Optional[int] = None) -> List[str]:
+        """
+        List chat session identifiers stored in Redis.
+
+        Args:
+            limit: Optional maximum number of session IDs to return.
+
+        Returns:
+            Sorted list of session IDs.
+        """
+        try:
+            pattern = self._make_key("*")
+            sessions: List[str] = []
+
+            for key in self.client.scan_iter(match=pattern):
+                # Keys follow chat_history:<session_id>
+                session_id = key.split(":", 1)[1] if ":" in key else key
+                sessions.append(session_id)
+
+                if limit is not None and len(sessions) >= limit:
+                    break
+
+            sessions.sort()
+            logger.info(f"Listed {len(sessions)} chat sessions")
+            return sessions
+
+        except Exception as e:
+            msg = f"Failed to list chat sessions: {str(e)}"
+            logger.error(msg)
+            return []
+
+>>>>>>> bb677be (feat : update logging error)
     def _trim_history(self, history: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """
         Trim history to keep only last N messages.
@@ -270,5 +308,10 @@ class ChatMemoryService:
             }
 
         except Exception as e:
+<<<<<<< HEAD
             logger.error(f"Failed to get session info for {session_id}: {str(e)}")
+=======
+            msg = f"Failed to get session info for {session_id}: {str(e)}"
+            logger.error(msg)
+>>>>>>> bb677be (feat : update logging error)
             return {"exists": False, "message_count": 0, "ttl": None}

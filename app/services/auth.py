@@ -30,6 +30,7 @@ async def authenticate_user(
     """
     user = await get_user_by_username(db, username)
     if not user:
+<<<<<<< HEAD
         logger.warning(f"Authentication failed: User {username} not found")
         return None
 
@@ -39,6 +40,20 @@ async def authenticate_user(
 
     if not user.is_active:
         logger.warning(f"Authentication failed: User {username} is inactive")
+=======
+        msg = f"Authentication failed: User {username} not found"
+        logger.warning(msg)
+        return None
+
+    if not verify_password(password, user.hashed_password):
+        msg = f"Authentication failed: Invalid password for {username}"
+        logger.warning(msg)
+        return None
+
+    if not user.is_active:
+        msg = f"Authentication failed: User {username} is inactive"
+        logger.warning(msg)
+>>>>>>> bb677be (feat : update logging error)
         return None
 
     logger.info(f"User {username} authenticated successfully")

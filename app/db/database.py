@@ -59,7 +59,11 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 
+<<<<<<< HEAD
 async def init_db():
+=======
+async def init_db() -> None:
+>>>>>>> bb677be (feat : update logging error)
     """
     Initialize database tables.
 
@@ -71,7 +75,11 @@ async def init_db():
     logger.info("Database tables created successfully")
 
 
+<<<<<<< HEAD
 async def close_db():
+=======
+async def close_db() -> None:
+>>>>>>> bb677be (feat : update logging error)
     """
     Close database connections.
 

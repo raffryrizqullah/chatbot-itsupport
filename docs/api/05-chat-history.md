@@ -15,7 +15,11 @@
 
 Chat history endpoints allow users to view past conversations, check session information, and clear conversation history. All conversations are stored in Redis with a 2-hour TTL.
 
+<<<<<<< HEAD
 **🔓 Authentication:** Not required (public access)
+=======
+**🔓 Authentication:** Not required for history/info/delete; admin token required for session listing
+>>>>>>> bb677be (feat : update logging error)
 
 ### Available Endpoints
 
@@ -24,6 +28,10 @@ Chat history endpoints allow users to view past conversations, check session inf
 | `GET` | `/api/v1/history/{session_id}` | Get conversation history |
 | `GET` | `/api/v1/session/{session_id}` | Get session metadata |
 | `DELETE` | `/api/v1/history/{session_id}` | Clear conversation history |
+<<<<<<< HEAD
+=======
+| `GET` | `/api/v1/sessions` | List active chat session IDs (admin) |
+>>>>>>> bb677be (feat : update logging error)
 
 ---
 
@@ -252,6 +260,60 @@ curl -X DELETE "http://localhost:8000/api/v1/history/user_session_123"
 
 ---
 
+<<<<<<< HEAD
+=======
+## 4. List Chat Sessions
+
+### `GET /api/v1/sessions`
+
+Retrieve session IDs that currently have chat history stored in Redis.
+
+> **Requires admin access.** Include a valid `Authorization: Bearer <token>` header.
+
+### Request
+
+**Query Parameters (optional):**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | integer | Maximum number of session IDs to return (1-1000). |
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+### Response
+
+**Success (200 OK):**
+```json
+{
+  "sessions": [
+    "anon_6efb8f62-4d52-4cb5-98d9-2e6c9dc742c1",
+    "user_acme_2025",
+    "demo_session"
+  ],
+  "total": 3
+}
+```
+
+**Error (500 Internal Server Error):**
+```json
+{
+  "detail": "Failed to list chat sessions: Redis connection refused"
+}
+```
+
+### cURL Example
+
+```bash
+curl -X GET "http://localhost:8000/api/v1/sessions?limit=20" \
+  -H "Authorization: Bearer <admin_access_token>"
+```
+
+---
+
+>>>>>>> bb677be (feat : update logging error)
 ## 🔄 Complete Chat History Flow
 
 ```mermaid

@@ -75,7 +75,11 @@ class RedisDocStore(BaseStore):
         db: Optional[int] = None,
         password: Optional[str] = None,
         namespace: str = "rag:doc"
+<<<<<<< HEAD
     ):
+=======
+    ) -> None:
+>>>>>>> bb677be (feat : update logging error)
         """
         Initialize Redis document store.
 

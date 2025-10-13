@@ -7,12 +7,21 @@ Handles PDF document uploads, processing, and metadata retrieval.
 from typing import List, Union, Optional, Dict, Any
 from functools import lru_cache
 from io import BytesIO
+<<<<<<< HEAD
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, Request
 from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse
+=======
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends, Request, Query
+from app.models.schemas import UploadResponse, BatchUploadResponse, ErrorResponse, DocumentListResponse, DocumentListItem
+>>>>>>> bb677be (feat : update logging error)
 from app.services.pdf_processor import PDFProcessor
 from app.services.summarizer import SummarizerService
 from app.services.vectorstore import VectorStoreService
 from app.services.r2_storage import R2StorageService
+<<<<<<< HEAD
+=======
+from app.utils.strings import to_document_name
+>>>>>>> bb677be (feat : update logging error)
 from app.core.config import settings
 from app.core.dependencies import require_role
 from app.core.rate_limit import limiter, RATE_LIMITS
@@ -174,6 +183,15 @@ async def _process_single_file(
     image_summaries = summarizer.summarize_images(extracted_content.images)
 
     # Add to vector store with source_link and custom_metadata
+<<<<<<< HEAD
+=======
+    # Ensure document_name stored in metadata for listing (auto-generated per file)
+    enriched_metadata = dict(metadata_dict or {})
+    auto_name = to_document_name(file.filename)
+    # Respect user-provided document_name in custom_metadata; otherwise use auto_name
+    enriched_metadata.setdefault("document_name", auto_name)
+
+>>>>>>> bb677be (feat : update logging error)
     counts = vectorstore.add_documents(
         text_chunks=extracted_content.texts,
         text_summaries=text_summaries,
@@ -183,7 +201,11 @@ async def _process_single_file(
         image_summaries=image_summaries,
         document_id=document_id,
         source_link=source_link,
+<<<<<<< HEAD
         custom_metadata=metadata_dict,
+=======
+        custom_metadata=enriched_metadata,
+>>>>>>> bb677be (feat : update logging error)
     )
 
     logger.info(f"Document {document_id} processed successfully")
@@ -193,7 +215,11 @@ async def _process_single_file(
         document_id=document_id,
         filename=file.filename,
         source_link=source_link,
+<<<<<<< HEAD
         custom_metadata=metadata_dict,
+=======
+        custom_metadata=enriched_metadata,
+>>>>>>> bb677be (feat : update logging error)
         status="completed",
         metadata={
             "num_texts": counts["texts"],
@@ -279,6 +305,10 @@ async def upload_document(
 
         except HTTPException as e:
             # Create error response for this file
+<<<<<<< HEAD
+=======
+            msg = f"Failed to process {file.filename}: {e.detail}"
+>>>>>>> bb677be (feat : update logging error)
             result = UploadResponse(
                 document_id="",
                 filename=file.filename,
@@ -290,11 +320,19 @@ async def upload_document(
             )
             results.append(result)
             failed += 1
+<<<<<<< HEAD
             logger.error(f"Failed to process {file.filename}: {e.detail}")
 
         except Exception as e:
             # Create error response for this file
             msg = f"Failed to process document: {str(e)}"
+=======
+            logger.error(msg)
+
+        except Exception as e:
+            # Create error response for this file
+            msg = f"Failed to process {file.filename}: {str(e)}"
+>>>>>>> bb677be (feat : update logging error)
             result = UploadResponse(
                 document_id="",
                 filename=file.filename,
@@ -306,7 +344,11 @@ async def upload_document(
             )
             results.append(result)
             failed += 1
+<<<<<<< HEAD
             logger.error(f"Failed to process {file.filename}: {msg}")
+=======
+            logger.error(msg)
+>>>>>>> bb677be (feat : update logging error)
 
     # Return single result or batch result
     if len(files) == 1:
@@ -321,3 +363,157 @@ async def upload_document(
             results=results,
             message=f"Processed {successful} of {len(files)} documents successfully",
         )
+<<<<<<< HEAD
+=======
+
+
+@router.get(
+    "/documents/list",
+    response_model=DocumentListResponse,
+    tags=["documents"],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    responses={
+        400: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+async def list_documents(
+    request: Request,
+    filter: Optional[str] = Query(
+        default=None,
+        description="URL-encoded JSON metadata filter using Pinecone operators (e.g., {\"content_type\": {\"$eq\": \"text\"}})",
+    ),
+    limit: int = Query(1000, ge=1, le=10000, description="Maximum number of vectors to scan (approximate listing)"),
+    namespace: Optional[str] = Query(None, description="Pinecone namespace (default namespace if omitted)"),
+) -> DocumentListResponse:
+    """
+    List indexed documents from Pinecone, aggregated by `document_id`.
+
+    Notes:
+    - This performs a filtered query to fetch up to `limit` vectors (not a full table scan) and groups them by `document_id`.
+    - Use the `filter` parameter to narrow by metadata (supports $eq, $in, $exists, etc.).
+    - Returns unique document count and per-document chunk counts by content type.
+    """
+    try:
+        metadata_filter: Optional[Dict[str, Any]] = None
+        if filter:
+            try:
+                metadata_filter = json.loads(filter)
+                if not isinstance(metadata_filter, dict):
+                    raise ValueError("filter must be a JSON object")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid filter JSON: {e}")
+
+        # Initialize Pinecone index client
+        from pinecone import Pinecone  # type: ignore
+
+        pc = Pinecone(api_key=settings.pinecone_api_key)
+        try:
+            index = pc.Index(name=settings.pinecone_index_name)
+        except Exception:
+            # Fallback for SDK variants that require host
+            indexes = pc.list_indexes()
+            host = None
+            for idx in indexes:
+                try:
+                    if getattr(idx, "name", None) == settings.pinecone_index_name:
+                        host = getattr(idx, "host", None)
+                        break
+                except Exception:
+                    # indexes might be dict-like
+                    if idx.get("name") == settings.pinecone_index_name:
+                        host = idx.get("host")
+                        break
+            if not host:
+                raise HTTPException(status_code=500, detail=f"Pinecone index not found: {settings.pinecone_index_name}")
+            index = pc.Index(host=host)
+
+        # Query using a zero vector to retrieve any matches filtered by metadata
+        # This is an approximate listing constrained by `limit`.
+        query_params: Dict[str, Any] = {
+            "vector": [0.0] * settings.pinecone_dimension,
+            "top_k": limit,
+            "include_metadata": True,
+        }
+        if metadata_filter:
+            query_params["filter"] = metadata_filter
+        if namespace:
+            query_params["namespace"] = namespace
+
+        result = index.query(**query_params)
+
+        matches = getattr(result, "matches", None) or result.get("matches", [])  # type: ignore[attr-defined]
+
+        # Aggregate by document_id
+        by_doc: Dict[str, Dict[str, Any]] = {}
+        total_vectors = 0
+        for m in matches:
+            md = getattr(m, "metadata", None) or m.get("metadata", {})  # type: ignore[attr-defined]
+            doc_id = (md or {}).get("document_id")
+            ctype = (md or {}).get("content_type", "unknown")
+            if not doc_id:
+                # Skip vectors without document_id (shouldn't happen in this app)
+                continue
+            total_vectors += 1
+            if doc_id not in by_doc:
+                by_doc[doc_id] = {
+                    "total_chunks": 0,
+                    "counts": {},
+                    "source_links": set(),
+                    "document_name": None,
+                    "author": None,
+                    "client_upload_timestamp": None,
+                    "sensitivity": None,
+                }
+            agg = by_doc[doc_id]
+            agg["total_chunks"] += 1
+            agg["counts"][ctype] = agg["counts"].get(ctype, 0) + 1
+            src = (md or {}).get("source_link")
+            if src:
+                agg["source_links"].add(src)
+            # Prefer explicit document_name, fallback to filename if present
+            name = (md or {}).get("document_name") or (md or {}).get("filename")
+            if name and not agg["document_name"]:
+                agg["document_name"] = str(name)
+            # Optional metadata fields: author, client_upload_timestamp, sensitivity
+            author = (md or {}).get("author")
+            if author and not agg["author"]:
+                agg["author"] = str(author)
+            client_ts = (md or {}).get("client_upload_timestamp")
+            if client_ts and not agg["client_upload_timestamp"]:
+                agg["client_upload_timestamp"] = str(client_ts)
+            sensitivity = (md or {}).get("sensitivity") or (md or {}).get("Sensitivitas")
+            if sensitivity and not agg["sensitivity"]:
+                agg["sensitivity"] = str(sensitivity)
+
+        # Build response items
+        items: List[DocumentListItem] = []
+        for doc_id, agg in by_doc.items():
+            links = list(agg["source_links"]) if agg["source_links"] else None
+            items.append(
+                DocumentListItem(
+                    document_id=doc_id,
+                    document_name=agg.get("document_name"),
+                    author=agg.get("author"),
+                    client_upload_timestamp=agg.get("client_upload_timestamp"),
+                    sensitivity=agg.get("sensitivity"),
+                    total_chunks=agg["total_chunks"],
+                    counts=agg["counts"],
+                    source_links=links,
+                )
+            )
+
+        return DocumentListResponse(
+            total_documents=len(items),
+            total_vectors=total_vectors,
+            documents=sorted(items, key=lambda x: x.document_id),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = f"Failed to list documents: {e}"
+        logger.error(msg)
+        raise HTTPException(status_code=500, detail=f"Failed to list documents: {e}")
+>>>>>>> bb677be (feat : update logging error)

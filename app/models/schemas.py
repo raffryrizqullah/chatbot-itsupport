@@ -27,6 +27,49 @@ class HealthResponse(BaseModel):
     version: str = Field(..., description="API version")
 
 
+<<<<<<< HEAD
+=======
+class ServiceHealthResponse(BaseModel):
+    """Health response schema for external services (e.g., OpenAI, Pinecone)."""
+
+    provider: str = Field(..., description="Service provider name")
+    status: str = Field(..., description="Health status (healthy/unhealthy/configuration_error)")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Current timestamp")
+    version: str = Field(..., description="API version")
+    details: Optional[Dict[str, Any]] = Field(default=None, description="Additional diagnostic details")
+
+
+class HealthSummaryResponse(BaseModel):
+    """Aggregated health summary across services."""
+
+    status: str = Field(..., description="Overall health status")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Current timestamp")
+    version: str = Field(..., description="API version")
+    services: Dict[str, ServiceHealthResponse] = Field(..., description="Per-service health details")
+
+
+class DocumentListItem(BaseModel):
+    """Aggregated info for a single document_id in Pinecone."""
+
+    document_id: str = Field(..., description="Document identifier")
+    document_name: Optional[str] = Field(default=None, description="Human-readable document name (e.g., original filename)")
+    author: Optional[str] = Field(default=None, description="Author metadata if provided at upload")
+    client_upload_timestamp: Optional[str] = Field(default=None, description="Client-side upload timestamp if provided")
+    sensitivity: Optional[str] = Field(default=None, description="Sensitivity level metadata if provided (e.g., public/internal)")
+    total_chunks: int = Field(..., description="Total vectors/chunks for this document")
+    counts: Dict[str, int] = Field(..., description="Counts by content_type (text/table/image)")
+    source_links: Optional[List[str]] = Field(default=None, description="Unique source links associated with the document")
+
+
+class DocumentListResponse(BaseModel):
+    """Listing response for documents stored in Pinecone."""
+
+    total_documents: int = Field(..., description="Unique document_id count")
+    total_vectors: int = Field(..., description="Total vectors matched by filter and limit")
+    documents: List[DocumentListItem] = Field(..., description="Per-document aggregated details")
+
+
+>>>>>>> bb677be (feat : update logging error)
 class UploadResponse(BaseModel):
     """Response schema for document upload endpoint."""
 
@@ -173,3 +216,13 @@ class APIKeyListResponse(BaseModel):
 
     total: int = Field(..., description="Total number of API keys")
     api_keys: List[APIKeyResponse] = Field(..., description="List of API keys")
+<<<<<<< HEAD
+=======
+
+
+class UserListResponse(BaseModel):
+    """Response schema for listing users (admin)."""
+
+    total: int = Field(..., description="Total matched users")
+    users: List[UserResponse] = Field(..., description="Users page items")
+>>>>>>> bb677be (feat : update logging error)

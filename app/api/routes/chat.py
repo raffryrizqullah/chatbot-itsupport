@@ -4,12 +4,23 @@ Chat history management endpoints.
 Provides endpoints for viewing and managing conversation history stored in Redis.
 """
 
+<<<<<<< HEAD
 from typing import List, Dict, Any
 from functools import lru_cache
 from fastapi import APIRouter, HTTPException, status, Request
 from app.models.schemas import ErrorResponse
 from app.services.chat_memory import ChatMemoryService
 from app.core.rate_limit import limiter, RATE_LIMITS
+=======
+from typing import List, Dict, Any, Optional
+from functools import lru_cache
+from fastapi import APIRouter, HTTPException, status, Request, Depends, Query
+from app.models.schemas import ErrorResponse
+from app.services.chat_memory import ChatMemoryService
+from app.core.rate_limit import limiter, RATE_LIMITS
+from app.core.dependencies import require_role
+from app.db.models import UserRole
+>>>>>>> bb677be (feat : update logging error)
 from pydantic import BaseModel, Field
 import logging
 
@@ -49,6 +60,63 @@ class ClearHistoryResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
+<<<<<<< HEAD
+=======
+class SessionListResponse(BaseModel):
+    """Response schema for session listing."""
+
+    sessions: List[str] = Field(..., description="List of session identifiers")
+    total: int = Field(..., description="Total number of sessions returned")
+
+
+@router.get(
+    "/sessions",
+    response_model=SessionListResponse,
+    tags=["chat"],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    responses={
+        429: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+@limiter.limit(RATE_LIMITS["chat_history"])
+async def list_sessions(
+    request: Request,
+    limit: Optional[int] = Query(
+        None,
+        ge=1,
+        le=1000,
+        description="Maximum number of session IDs to return",
+    ),
+) -> SessionListResponse:
+    """
+    List session identifiers stored in chat history.
+
+    Args:
+        limit: Optional maximum number of sessions to return.
+
+    Returns:
+        SessionListResponse containing session IDs and count.
+    """
+    try:
+        chat_memory = get_chat_memory()
+        sessions = chat_memory.list_sessions(limit=limit)
+
+        return SessionListResponse(
+            sessions=sessions,
+            total=len(sessions),
+        )
+
+    except Exception as e:
+        msg = f"Failed to list chat sessions: {str(e)}"
+        logger.error(msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=msg,
+        )
+
+
+>>>>>>> bb677be (feat : update logging error)
 @router.get(
     "/history/{session_id}",
     response_model=ChatHistoryResponse,
