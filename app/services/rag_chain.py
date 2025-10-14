@@ -251,20 +251,26 @@ class RAGChainService:
             elif msg["role"] == "assistant":
                 history_messages.append(AIMessage(content=msg["content"]))
 
-        # Build system message with instructions
+        # Build system message with strict instructions
         system_message = SystemMessage(
-            content="""Anda adalah asisten IT support. Jawab pertanyaan berdasarkan konteks yang diberikan dan riwayat percakapan.
-            Jika pertanyaan merujuk ke percakapan sebelumnya (menggunakan kata seperti 'itu', 'tersebut', 'ini'), gunakan riwayat chat untuk memahami yang dimaksud pengguna.
-            Berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia."""
+            content="""Anda adalah asisten IT support yang HANYA menjawab berdasarkan konteks yang diberikan dan riwayat percakapan.
+
+ATURAN KETAT:
+1. HANYA gunakan informasi dari konteks knowledge base dan riwayat percakapan
+2. JANGAN gunakan pengetahuan umum Anda di luar konteks
+3. Jika konteks tidak cukup untuk menjawab pertanyaan, katakan: "Maaf, saya tidak menemukan informasi yang cukup dalam knowledge base untuk menjawab pertanyaan ini."
+4. JANGAN pernah berimajinasi atau menebak jawaban
+5. Jika pertanyaan merujuk ke percakapan sebelumnya (menggunakan kata seperti 'itu', 'tersebut', 'ini'), gunakan riwayat chat untuk memahami yang dimaksud pengguna."""
                     )
 
         # Build prompt content with context
         prompt_text = f"""Konteks dari knowledge base:
-        {context_text}
+{context_text}
 
-        Pertanyaan saat ini: {question}
+Pertanyaan saat ini: {question}
 
-        Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas dan riwayat percakapan. Jawab dalam bahasa Indonesia."""
+Jika informasi di atas dan riwayat percakapan cukup untuk menjawab, berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia.
+Jika TIDAK cukup, gunakan kalimat penolakan sesuai aturan nomor 3."""
 
         prompt_content = [{"type": "text", "text": prompt_text}]
 
@@ -301,15 +307,22 @@ class RAGChainService:
         if docs_by_type["texts"]:
             context_text = self._build_context_text(docs_by_type["texts"])
 
-        # Build prompt template
-        prompt_text = f"""Jawab pertanyaan hanya berdasarkan konteks berikut, yang dapat berisi teks, tabel, dan gambar.
+        # Build prompt template with strict instructions
+        prompt_text = f"""Anda adalah asisten IT support yang HANYA menjawab berdasarkan konteks yang diberikan.
 
-        Konteks:
-        {context_text}
+ATURAN KETAT:
+1. HANYA gunakan informasi dari konteks di bawah ini
+2. JANGAN gunakan pengetahuan umum Anda di luar konteks
+3. Jika konteks tidak cukup untuk menjawab pertanyaan, katakan: "Maaf, saya tidak menemukan informasi yang cukup dalam knowledge base untuk menjawab pertanyaan ini."
+4. JANGAN pernah berimajinasi atau menebak jawaban
 
-        Pertanyaan: {question}
+Konteks dari knowledge base:
+{context_text}
 
-        Berikan jawaban yang jelas dan ringkas berdasarkan konteks di atas. Jawab dalam bahasa Indonesia."""
+Pertanyaan: {question}
+
+Jika informasi di atas cukup untuk menjawab, berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia.
+Jika TIDAK cukup, gunakan kalimat penolakan di aturan nomor 3."""
 
         prompt_content = [{"type": "text", "text": prompt_text}]
 

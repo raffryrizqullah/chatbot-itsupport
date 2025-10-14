@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     # RAG Configuration
     rag_top_k: int = 4  # Number of documents to retrieve
     rag_batch_concurrency: int = 1  # Concurrent summarization requests (reduced for rate limit)
+    rag_similarity_threshold: float = 0.7  # Minimum similarity score for relevant documents (0.0-1.0)
+    rag_enable_authorization_check: bool = True  # Enable double-check for authorization rejections
 
     # Redis Configuration (for persistent docstore)
     redis_host: str = "localhost"

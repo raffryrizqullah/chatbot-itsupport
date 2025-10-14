@@ -176,10 +176,56 @@ async def query_documents(
                 seen_links.add(link)
                 source_links.append(link)
 
+        # Check if no documents found - could be due to authorization or truly no data
+        from app.core.config import settings
         if not retrieved_docs:
+            # Double-check: is data restricted or truly non-existent?
+            # Only check if user has restrictions (Student/Anonymous) and feature is enabled
+            should_check_authorization = (
+                settings.rag_enable_authorization_check
+                and current_user
+                and current_user.role in [UserRole.STUDENT]
+            )
+
+            if should_check_authorization:
+                logger.info("No docs found with filter, checking if data exists without filter...")
+                try:
+                    unrestricted_docs, _ = vectorstore.search(
+                        query_req.question,
+                        k=1,
+                        metadata_filter=None,  # No filter - check if data exists
+                        return_metadata=False,
+                        include_scores=False,
+                    )
+
+                    if unrestricted_docs:
+                        # Data exists but user doesn't have access
+                        msg = f"Access denied: User {current_user.username} ({current_user.role}) attempted to access restricted data"
+                        logger.warning(msg)
+                        answer = "Maaf, pertanyaan Anda memerlukan akses ke data internal yang tidak tersedia untuk role Anda. Silakan hubungi administrator atau dosen jika Anda memerlukan akses."
+
+                        chat_memory.add_exchange(session_id, query_req.question, answer)
+
+                        return QueryResponse(
+                            answer=answer,
+                            session_id=session_id,
+                            metadata={
+                                "num_documents_retrieved": 0,
+                                "include_sources": query_req.include_sources,
+                                "has_chat_history": len(chat_history) > 0,
+                                "retrieved_documents": [],
+                                "similarity_scores": [],
+                                "rejection_reason": "insufficient_permissions",
+                            },
+                        )
+                except Exception as e:
+                    logger.error(f"Error during authorization check: {str(e)}")
+                    # Continue with normal "no documents found" response
+
+            # Normal "no documents found" response
             msg = "No relevant documents found"
             logger.warning(msg)
-            answer = "I couldn't find any relevant information to answer your question."
+            answer = "Maaf, saya tidak menemukan informasi yang relevan dalam knowledge base untuk menjawab pertanyaan Anda."
 
             # Save to chat history even for no results
             chat_memory.add_exchange(session_id, query_req.question, answer)
@@ -193,6 +239,31 @@ async def query_documents(
                     "has_chat_history": len(chat_history) > 0,
                     "retrieved_documents": [],
                     "similarity_scores": [],
+                    "rejection_reason": "no_documents_found",
+                },
+            )
+
+        # Check similarity score threshold - reject if max score too low
+        if similarity_scores and max(similarity_scores) < settings.rag_similarity_threshold:
+            msg = f"No relevant documents found (max similarity: {max(similarity_scores):.2f} < threshold: {settings.rag_similarity_threshold})"
+            logger.warning(msg)
+            answer = "Maaf, saya tidak menemukan informasi yang cukup relevan dalam knowledge base untuk menjawab pertanyaan Anda."
+
+            # Save to chat history
+            chat_memory.add_exchange(session_id, query_req.question, answer)
+
+            return QueryResponse(
+                answer=answer,
+                session_id=session_id,
+                metadata={
+                    "num_documents_retrieved": len(retrieved_docs),
+                    "include_sources": query_req.include_sources,
+                    "has_chat_history": len(chat_history) > 0,
+                    "retrieved_documents": retrieved_documents_metadata,
+                    "similarity_scores": similarity_scores,
+                    "max_similarity_score": max(similarity_scores),
+                    "avg_similarity_score": sum(similarity_scores) / len(similarity_scores),
+                    "rejection_reason": "low_similarity",
                 },
             )
 
