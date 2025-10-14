@@ -36,6 +36,8 @@ ENV/
 # Environment Variables
 .env
 .env.local
+.env.production
+.env.*.production
 
 # Uploaded Files
 content/
@@ -63,3 +65,10 @@ langchain_multimodal.ipynb
 .pytest_cache/
 .coverage
 htmlcov/
+
+# aaPanel/Server-Specific (Runtime Generated)
+nltk_data/
+matplotlib_config/
+systemd/
+dependency_report/
+dependency_report_oldUBUNTU/
