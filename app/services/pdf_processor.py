@@ -5,16 +5,25 @@ This module handles the extraction and parsing of multi-modal content
 from PDF documents using the unstructured library.
 """
 
-from typing import List, Dict, Any, Tuple, Union, BinaryIO
+from typing import List, Dict, Any, Tuple, Union, BinaryIO, Optional
 from dataclasses import dataclass
 from io import BytesIO
+from base64 import b64decode, b64encode
 from unstructured.partition.pdf import partition_pdf
 from unstructured.documents.elements import CompositeElement, Table, Image
 from app.core.config import settings
 from app.core.exceptions import PDFProcessingError
 import logging
 
+try:
+    from PIL import Image as PILImage
+except ImportError:
+    PILImage = None
+
 logger = logging.getLogger(__name__)
+
+# Supported image formats by OpenAI Vision API
+SUPPORTED_IMAGE_FORMATS = {"png", "jpeg", "jpg", "gif", "webp"}
 
 
 @dataclass
@@ -171,17 +180,103 @@ class PDFProcessor:
 
         return texts, tables
 
+    @staticmethod
+    def _detect_image_format(image_b64: str) -> Optional[str]:
+        """
+        Detect image format from base64 string.
+
+        Args:
+            image_b64: Base64-encoded image string.
+
+        Returns:
+            Image format (e.g., ``'png'``, ``'jpeg'``, ``'gif'``, ``'webp'``) or None if detection fails.
+        """
+        if not PILImage:
+            logger.warning("PIL not available, cannot detect image format")
+            return None
+
+        try:
+            image_data = b64decode(image_b64)
+            img = PILImage.open(BytesIO(image_data))
+            format_lower = img.format.lower() if img.format else None
+            return format_lower
+        except Exception as e:
+            logger.warning(f"Failed to detect image format: {e}")
+            return None
+
+    @staticmethod
+    def _convert_image_to_supported_format(image_b64: str) -> Optional[str]:
+        """
+        Convert image to a format supported by OpenAI Vision API.
+
+        Converts images to PNG (for transparency) or JPEG (for RGB images)
+        if the current format is not supported.
+
+        Args:
+            image_b64: Base64-encoded image string in any format.
+
+        Returns:
+            Converted base64-encoded image string in supported format, or None if conversion fails.
+        """
+        if not PILImage:
+            logger.warning("PIL not available, cannot convert image")
+            return None
+
+        try:
+            # Decode and open image
+            image_data = b64decode(image_b64)
+            img = PILImage.open(BytesIO(image_data))
+
+            # Check current format
+            current_format = img.format.lower() if img.format else None
+
+            # If already in supported format, return as-is
+            if current_format in SUPPORTED_IMAGE_FORMATS:
+                logger.debug(f"Image already in supported format: {current_format}")
+                return image_b64
+
+            # Convert to appropriate format
+            logger.info(f"Converting image from {current_format} to supported format")
+            output_buffer = BytesIO()
+
+            # Handle RGBA and palette images (need transparency support)
+            if img.mode in ("RGBA", "LA", "P"):
+                img = img.convert("RGBA")
+                img.save(output_buffer, format="PNG")
+                target_format = "PNG"
+            else:
+                # Convert to RGB for JPEG (smaller size)
+                img = img.convert("RGB")
+                img.save(output_buffer, format="JPEG", quality=95)
+                target_format = "JPEG"
+
+            # Encode to base64
+            output_buffer.seek(0)
+            converted_b64 = b64encode(output_buffer.read()).decode("utf-8")
+
+            logger.info(f"Successfully converted image to {target_format}")
+            return converted_b64
+
+        except Exception as e:
+            msg = f"Failed to convert image: {e}"
+            logger.error(msg)
+            return None
+
     def _extract_images(self, chunks: List[Any]) -> List[str]:
         """
-        Extract base64-encoded images from CompositeElement objects.
+        Extract and validate base64-encoded images from CompositeElement objects.
+
+        Automatically converts images to OpenAI-supported formats (PNG/JPEG).
+        Skips images that cannot be converted with a warning.
 
         Args:
             chunks: List of elements extracted from PDF.
 
         Returns:
-            List of base64-encoded image strings.
+            List of base64-encoded image strings in supported formats only.
         """
         images_b64 = []
+        skipped_count = 0
 
         for chunk in chunks:
             if "CompositeElement" in str(type(chunk)):
@@ -190,6 +285,15 @@ class PDFProcessor:
                     if "Image" in str(type(element)):
                         image_b64 = element.metadata.image_base64
                         if image_b64:
-                            images_b64.append(image_b64)
+                            # Validate and convert image format
+                            converted_image = self._convert_image_to_supported_format(image_b64)
+                            if converted_image:
+                                images_b64.append(converted_image)
+                            else:
+                                skipped_count += 1
+                                logger.warning("Skipping image: conversion to supported format failed")
+
+        if skipped_count > 0:
+            logger.warning(f"Skipped {skipped_count} invalid or unsupported images")
 
         return images_b64
