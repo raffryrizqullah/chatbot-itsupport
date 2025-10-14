@@ -103,9 +103,6 @@ Content-Type: application/json
     "num_documents_retrieved": 4,
     "has_chat_history": false,
     "model": "gpt-4o-mini",
-<<<<<<< HEAD
-    "total_tokens": 456
-=======
     "total_tokens": 456,
     "retrieved_documents": [
       {
@@ -119,8 +116,10 @@ Content-Type: application/json
     "similarity_scores": [0.93, 0.88, 0.85, 0.81],
     "max_similarity_score": 0.93,
     "min_similarity_score": 0.81,
-    "avg_similarity_score": 0.8675
->>>>>>> bb677be (feat : update logging error)
+    "avg_similarity_score": 0.8675,
+    "source_links": [
+      "https://university.edu/courses/ai101/rag.pdf"
+    ]
   }
 }
 ```
@@ -138,12 +137,8 @@ Content-Type: application/json
           "document_id": "123e4567-e89b-12d3-a456-426614174000",
           "content_type": "text",
           "sensitivity": "public",
-<<<<<<< HEAD
-          "source_link": "https://university.edu/courses/ai101/rag.pdf"
-=======
           "source_link": "https://university.edu/courses/ai101/rag.pdf",
           "similarity_score": 0.93
->>>>>>> bb677be (feat : update logging error)
         }
       }
     ],
@@ -152,9 +147,6 @@ Content-Type: application/json
   "metadata": {
     "num_documents_retrieved": 4,
     "has_chat_history": false,
-<<<<<<< HEAD
-    "model": "gpt-4o-mini"
-=======
     "model": "gpt-4o-mini",
     "retrieved_documents": [
       {
@@ -172,7 +164,6 @@ Content-Type: application/json
     "source_links": [
       "https://university.edu/courses/ai101/rag.pdf"
     ]
->>>>>>> bb677be (feat : update logging error)
   }
 }
 ```
@@ -185,13 +176,9 @@ Content-Type: application/json
   "metadata": {
     "num_documents_retrieved": 0,
     "include_sources": false,
-<<<<<<< HEAD
-    "has_chat_history": false
-=======
     "has_chat_history": false,
     "retrieved_documents": [],
     "similarity_scores": []
->>>>>>> bb677be (feat : update logging error)
   }
 }
 ```
@@ -399,6 +386,211 @@ curl -X POST "http://localhost:8000/api/v1/query" \
 
 ---
 
+## 🤖 Smart Source Handling
+
+The API uses **intent detection** to intelligently decide when to include source links in answers.
+
+### Small Talk Detection
+
+The system recognizes small talk and won't append sources for simple greetings or acknowledgments:
+
+**Detected as Small Talk:**
+- **Greetings**: "hai", "halo", "hello", "hi", "selamat pagi/siang/sore/malam"
+- **Thanks**: "terima kasih", "makasih", "thanks", "thank you"
+- **Acknowledgments**: "oke", "ok", "sip", "siap", "noted"
+- **Apologies**: "maaf", "sorry"
+
+**Example:**
+```json
+// Request
+{
+  "question": "terima kasih atas penjelasannya"
+}
+
+// Response (no source links appended)
+{
+  "answer": "Sama-sama! Senang bisa membantu."
+}
+```
+
+### Source Request Detection
+
+When users explicitly ask for sources, the API automatically includes them inline:
+
+**Source Keywords Detected:**
+- Indonesian: "sumber", "referensi", "link", "tautan", "bukti", "dokumen", "lampiran"
+- English: "source", "citation", "lihat dokumen"
+
+**Example:**
+```json
+// Request
+{
+  "question": "Apa itu RAG? Berikan sumbernya",
+  "include_sources": false  // Even if false, sources added due to keyword
+}
+
+// Response (sources appended inline)
+{
+  "answer": "RAG adalah Retrieval-Augmented Generation...\n\nSumber:\n- https://university.edu/rag.pdf\n- https://docs.openai.com/rag"
+}
+```
+
+### Inline Source Format
+
+When sources are included, they appear at the end of the answer in Indonesian format:
+
+```
+[Answer text here...]
+
+Sumber:
+- https://link1.com
+- https://link2.com
+- https://link3.com
+```
+
+**Conditions for Auto-Appending Sources:**
+1. `include_sources: true` OR user asks for sources (keywords detected)
+2. AND NOT small talk (greeting/thanks/acknowledgment)
+3. AND documents were retrieved successfully
+
+---
+
+## 📊 Similarity Scores
+
+Each retrieved document includes a **similarity score** (0.0 - 1.0) indicating relevance to the question.
+
+### Score Interpretation
+
+| Score Range | Relevance Level | Description |
+|-------------|-----------------|-------------|
+| **0.9 - 1.0** | Highly Relevant | Direct match, highly confident |
+| **0.8 - 0.9** | Very Relevant | Strong semantic match |
+| **0.7 - 0.8** | Relevant | Good match, useful information |
+| **< 0.7** | Marginally Relevant | Weak match, may not be useful |
+
+### Metadata Fields
+
+**In every response metadata:**
+
+```json
+{
+  "similarity_scores": [0.93, 0.88, 0.85, 0.81],
+  "max_similarity_score": 0.93,
+  "min_similarity_score": 0.81,
+  "avg_similarity_score": 0.8675,
+  "retrieved_documents": [
+    {
+      "document_id": "550e8400-e29b-41d4-a716-446655440000",
+      "document_name": "rag_guide.pdf",
+      "content_type": "text",
+      "source_link": "https://example.com/rag_guide.pdf",
+      "similarity_score": 0.93
+    }
+  ],
+  "source_links": [
+    "https://example.com/rag_guide.pdf"
+  ]
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `similarity_scores` | array | All similarity scores for retrieved documents |
+| `max_similarity_score` | float | Highest similarity score |
+| `min_similarity_score` | float | Lowest similarity score |
+| `avg_similarity_score` | float | Average of all scores |
+| `retrieved_documents` | array | Detailed metadata for each document |
+| `source_links` | array | Unique source links (duplicates removed) |
+
+### Using Scores for Quality Assessment
+
+**High Quality Results (avg > 0.85):**
+```json
+{
+  "avg_similarity_score": 0.89,
+  "max_similarity_score": 0.95
+}
+```
+✅ Answer is highly reliable, documents are very relevant
+
+**Medium Quality Results (0.70 < avg < 0.85):**
+```json
+{
+  "avg_similarity_score": 0.78,
+  "max_similarity_score": 0.83
+}
+```
+⚠️ Answer may be somewhat relevant, review sources
+
+**Low Quality Results (avg < 0.70):**
+```json
+{
+  "avg_similarity_score": 0.62,
+  "max_similarity_score": 0.68
+}
+```
+❌ Documents may not be very relevant, consider rephrasing question
+
+---
+
+## 🖼️ Image Format Support
+
+The API automatically **converts images** extracted from PDFs to OpenAI Vision API-compatible formats.
+
+### Supported Formats
+
+**Native Support (No Conversion):**
+- **PNG** - Portable Network Graphics
+- **JPEG/JPG** - Joint Photographic Experts Group
+- **GIF** - Graphics Interchange Format
+- **WebP** - Web Picture format
+
+**Auto-Converted Formats:**
+- **TIFF** → JPEG or PNG
+- **BMP** → JPEG or PNG
+- **Other formats** → JPEG or PNG (depending on image properties)
+
+### Conversion Rules
+
+| Image Type | Conversion Target | Reason |
+|------------|-------------------|---------|
+| RGBA (transparency) | **PNG** | Preserves alpha channel |
+| LA (grayscale + alpha) | **PNG** | Preserves transparency |
+| P (palette mode) | **PNG** | Preserves color palette |
+| RGB | **JPEG (quality 95%)** | Smaller file size |
+
+### Handling Corrupt Images
+
+If an image cannot be converted, it is **skipped with a warning** in the logs:
+
+```
+WARNING: Skipped 2 invalid or unsupported images
+```
+
+**Impact:**
+- Query processing continues normally
+- Other images are still used
+- Answer is generated without corrupt images
+
+**Example Log:**
+```
+INFO: Converting image from tiff to supported format
+INFO: Successfully converted image to JPEG
+WARNING: Skipping image: conversion to supported format failed
+WARNING: Skipped 1 invalid or unsupported images
+```
+
+### Benefits
+
+✅ **No user intervention needed** - Automatic format detection and conversion
+✅ **Broad compatibility** - Works with most PDF image formats
+✅ **Optimized quality** - JPEG quality 95% for minimal loss
+✅ **Graceful degradation** - Skips corrupt images instead of failing
+
+---
+
 ## 💡 Tips & Best Practices
 
 ### 1. Session Management
@@ -447,27 +639,64 @@ curl -X POST "http://localhost:8000/api/v1/query" \
 - "What is Retrieval-Augmented Generation?"
 - "Explain the difference between supervised and unsupervised learning"
 - "How does the transformer architecture work?"
+- "Apa saja komponen utama dalam RAG?" (specific question)
+- "Bagaimana cara kerja vector search?" (how question)
 
 **❌ Poor Questions:**
 - "rag" (too short, ambiguous)
 - "tell me everything" (too broad)
 - "yes" (requires conversation context)
+- "hai" (greeting, not a question)
+- "oke" (acknowledgment, not a question)
 
-### 4. Including Sources
+### 4. Smart Question Formulation for Intent
 
+**For Information Queries (Gets sources automatically):**
 ```json
-// Development/Testing - include sources
+{
+  "question": "Apa itu machine learning? Berikan sumbernya"
+}
+// Auto-includes sources due to keyword "sumbernya"
+```
+
+**For Greetings/Small Talk (No sources needed):**
+```json
+{
+  "question": "Terima kasih atas informasinya"
+}
+// No sources appended, recognized as small talk
+```
+
+**For Follow-up Questions:**
+```json
+{
+  "question": "Jelaskan lebih detail tentang itu",
+  "session_id": "same_session_id"  // Uses chat history for context
+}
+// Understands "itu" from previous conversation
+```
+
+### 5. Including Sources
+
+**Explicit Control:**
+```json
+// Force include sources in response body
 {
   "question": "What is RAG?",
-  "include_sources": true  // See what documents were used
+  "include_sources": true
 }
 
-// Production - exclude sources for faster response
+// Disable sources (but still auto-added if user asks for them)
 {
   "question": "What is RAG?",
   "include_sources": false
 }
 ```
+
+**Automatic Behavior:**
+- Sources **auto-appended inline** if question contains source keywords
+- Small talk **never gets sources** appended
+- Production: Use `false` for faster responses (unless sources explicitly needed)
 
 ---
 
@@ -512,6 +741,52 @@ curl -X POST "http://localhost:8000/api/v1/query" \
 }
 ```
 **Solution:** Ensure Redis server is running.
+
+### 5. Image Format Warning
+```
+WARNING: Skipped 2 invalid or unsupported images
+```
+**Cause:** Some images in PDF couldn't be converted to OpenAI-compatible format.
+
+**Impact:**
+- Query processing continues normally
+- Answer generated without those images
+- Other valid images still used
+
+**Solutions:**
+- Check PDF for corrupt/invalid images
+- Verify image formats in source PDF
+- This is a warning, not an error - system gracefully handles it
+
+**Details:**
+Images are automatically converted from formats like TIFF, BMP to PNG/JPEG. If conversion fails (corrupt data), the image is skipped but processing continues.
+
+### 6. Low Similarity Scores
+```json
+{
+  "avg_similarity_score": 0.58,
+  "max_similarity_score": 0.65
+}
+```
+**Cause:** Retrieved documents have low relevance to the question.
+
+**Impact:** Answer may not be accurate or relevant.
+
+**Solutions:**
+- Rephrase question to be more specific
+- Check if relevant documents are uploaded
+- Try different keywords
+- Increase `top_k` value to retrieve more documents
+
+### 7. Small Talk Not Getting Response
+**Issue:** User says "terima kasih" and expects detailed response.
+
+**Cause:** Small talk detection recognized greeting/acknowledgment.
+
+**Solution:**
+- Small talk gets brief acknowledgment responses
+- For information queries, use question words: "apa", "bagaimana", "jelaskan"
+- Add context: "Terima kasih. Bisa jelaskan lebih lanjut tentang X?"
 
 ---
 
