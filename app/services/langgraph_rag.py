@@ -449,15 +449,17 @@ class LangGraphRAGService:
                 ))
                 return {"messages": [greeting_response]}
 
-            # For IT questions: Use LLM with strict knowledge base enforcement
-            logger.info(f"IT question detected, using retrieve tool: {user_query[:50]}...")
+            # For all non-greeting questions: Use LLM with strict knowledge base enforcement
+            logger.info(f"Question detected, enforcing knowledge base search: {user_query[:50]}...")
             strict_instruction = SystemMessage(content=(
-                "You are an IT support assistant with access to a knowledge base search tool.\n\n"
-                "STRICT RULES:\n"
-                "1. For ANY IT-related question → MUST use the retrieve tool to search the knowledge base\n"
-                "2. NEVER answer questions from your general knowledge without checking the knowledge base first\n"
-                "3. If in doubt → use the retrieve tool\n\n"
-                "Remember: Your primary job is to search the IT support knowledge base, not to answer from memory."
+                "You are an IT support assistant with STRICT knowledge base boundaries.\n\n"
+                "CRITICAL RULES:\n"
+                "1. For ANY question (not just IT-related) → YOU MUST use the retrieve tool FIRST\n"
+                "2. NEVER respond from your general knowledge without checking knowledge base\n"
+                "3. After retrieve tool returns results:\n"
+                "   - If results found → Use them to answer\n"
+                "   - If 'No relevant documents found' → You will be told to say you don't know\n\n"
+                "Your ONLY job is to search the knowledge base. DO NOT use external knowledge."
             ))
 
             # Prepend instruction to conversation messages
@@ -468,7 +470,8 @@ class LangGraphRAGService:
             return {"messages": [response]}
 
         # Node 2: Tools (ToolNode executes retrieve)
-        tools_node = ToolNode([retrieve_tool])
+        # Enable error handling per LangGraph best practices
+        tools_node = ToolNode([retrieve_tool], handle_tool_errors=True)
 
         # Node 3: Generate final answer
         def generate(state: MessagesState) -> Dict[str, List]:
@@ -478,6 +481,9 @@ class LangGraphRAGService:
             Collects the most recent ToolMessages (retrieval results) and
             constructs a prompt with strict instructions to only use the
             provided context.
+
+            Per LangGraph agentic RAG pattern: handles empty results by
+            returning "tidak tahu" message when no documents found.
 
             Args:
                 state: Current conversation state with messages.
@@ -497,6 +503,16 @@ class LangGraphRAGService:
             # Format retrieved context
             docs_content = "\n\n".join(doc.content for doc in tool_messages)
 
+            # Handle empty results - per LangGraph agentic RAG pattern
+            # If no documents found in knowledge base, return "tidak tahu" response
+            if not docs_content or "No relevant documents found" in docs_content:
+                logger.info("No documents found in knowledge base, responding with 'tidak tahu'")
+                no_knowledge_response = AIMessage(content=(
+                    "Maaf, saya tidak memiliki informasi tentang itu dalam knowledge base saya. "
+                    "Saya hanya bisa menjawab pertanyaan terkait IT support yang ada di sistem kami."
+                ))
+                return {"messages": [no_knowledge_response]}
+
             # STRICT system prompt - knowledge base boundaries
             system_message_content = (
                 "Anda adalah asisten IT support yang HANYA menjawab berdasarkan konteks yang diberikan.\n\n"
@@ -507,7 +523,13 @@ class LangGraphRAGService:
                 '"Maaf, saya tidak menemukan informasi yang cukup dalam knowledge base untuk menjawab pertanyaan ini."\n'
                 "4. JANGAN pernah berimajinasi atau menebak jawaban\n"
                 "5. Berikan jawaban yang jelas, ringkas, dan dalam bahasa Indonesia\n"
-                "6. Maksimal 3-4 kalimat kecuali pertanyaan membutuhkan detail lebih\n\n"
+                "6. Format jawaban:\n"
+                "   - Gunakan **bold** untuk poin penting\n"
+                "   - Gunakan `code` untuk command/kode\n"
+                "   - Gunakan bullet points (-) untuk list\n"
+                "   - Gunakan \n\n untuk pisah paragraf\n"
+                "   - Tampilkan URL dengan format: [Teks](URL)\n"
+                "7. Maksimal 3-4 kalimat kecuali pertanyaan membutuhkan detail lebih\n\n"
                 f"Konteks dari knowledge base:\n{docs_content}"
             )
 
@@ -540,10 +562,11 @@ class LangGraphRAGService:
         # Add conditional edge for short-circuiting
         # If query_or_respond doesn't call tools (e.g., greeting), go to END
         # Otherwise, go to tools node
+        # Per LangGraph docs: tools_condition returns "tools" if tool_calls exist, else END
         graph_builder.add_conditional_edges(
             "query_or_respond",
             tools_condition,
-            {END: END, "tools": "tools"},
+            {"tools": "tools", END: END},  # Order: tools first, then END
         )
 
         # Add edges
@@ -591,14 +614,20 @@ class LangGraphRAGService:
             # Prepare config with thread_id for memory
             config = {"configurable": {"thread_id": thread_id}} if thread_id else None
 
-            # Stream through graph
+            # Stream through graph and track execution
             messages_history = []
+            executed_nodes = []
             for step in self.graph.stream(
                 {"messages": [{"role": "user", "content": question}]},
                 stream_mode="values",
                 config=config,
             ):
                 messages_history = step["messages"]
+                # Track which nodes were executed (for debugging/metadata)
+                if len(step.get("messages", [])) > 0:
+                    last_msg = step["messages"][-1]
+                    if hasattr(last_msg, "type"):
+                        executed_nodes.append(last_msg.type)
 
             # Extract final answer
             if not messages_history:
@@ -614,7 +643,7 @@ class LangGraphRAGService:
 
             logger.info("LangGraph query processed successfully")
 
-            # Build metadata response
+            # Build metadata response with execution tracking
             metadata = {
                 "thread_id": thread_id,
                 "message_count": len(messages_history),
@@ -623,6 +652,7 @@ class LangGraphRAGService:
                     for msg in messages_history
                 ),
                 "langgraph_enabled": True,
+                "executed_node_types": executed_nodes,  # Track execution flow
             }
 
             # Add retrieved documents metadata if tools were used
@@ -641,7 +671,7 @@ class LangGraphRAGService:
 
     def get_conversation_history(self, thread_id: str) -> List[Dict[str, str]]:
         """
-        Get conversation history for a thread.
+        Get conversation history for a thread using LangGraph checkpointer.
 
         Args:
             thread_id: Thread ID to retrieve history for.
@@ -649,10 +679,35 @@ class LangGraphRAGService:
         Returns:
             List of messages with role and content.
 
-        Note:
-            This is a placeholder. In production, implement proper history
-            retrieval from the checkpointer.
+        Raises:
+            Exception: If history retrieval fails.
         """
-        # TODO: Implement proper history retrieval from MemorySaver
-        logger.warning("Conversation history retrieval not yet implemented")
-        return []
+        try:
+            # Get current state from checkpointer using thread_id
+            config = {"configurable": {"thread_id": thread_id}}
+            state = self.graph.get_state(config)
+
+            # Extract messages from state
+            if not state or not state.values:
+                logger.info(f"No history found for thread {thread_id}")
+                return []
+
+            messages = state.values.get("messages", [])
+
+            # Convert messages to dict format
+            history = []
+            for msg in messages:
+                if hasattr(msg, "type") and hasattr(msg, "content"):
+                    # Filter out tool messages for cleaner history
+                    if msg.type in ("human", "ai"):
+                        history.append({
+                            "role": "user" if msg.type == "human" else "assistant",
+                            "content": msg.content,
+                        })
+
+            logger.info(f"Retrieved {len(history)} messages from thread {thread_id}")
+            return history
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve conversation history: {str(e)}")
+            return []
