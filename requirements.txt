@@ -13,6 +13,9 @@ langchain-openai
 langchain-pinecone
 langchain-community
 
+# LangGraph (Conversational RAG with stateful memory)
+langgraph
+
 # Document Processing
 unstructured[pdf]
 pillow
