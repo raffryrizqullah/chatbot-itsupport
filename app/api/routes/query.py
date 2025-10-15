@@ -132,6 +132,21 @@ async def query_documents(
         chat_history = chat_memory.get_history(session_id)
         logger.info(f"Loaded {len(chat_history)} messages from chat history")
 
+        # Handle small talk before vector search (more efficient)
+        if is_smalltalk(query_req.question):
+            logger.info("Small talk detected, responding without vector search")
+            answer = "Halo! Ada yang bisa saya bantu?"
+            chat_memory.add_exchange(session_id, query_req.question, answer)
+            return QueryResponse(
+                answer=answer,
+                session_id=session_id,
+                metadata={
+                    "num_documents_retrieved": 0,
+                    "has_chat_history": len(chat_history) > 0,
+                    "is_smalltalk": True,
+                },
+            )
+
         # Build metadata filter based on user role
         metadata_filter = build_metadata_filter(current_user)
         if current_user:
