@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # OpenAI Configuration
     openai_api_key: str
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-5-2025-08-07"
     openai_temperature: float = 0.5
 
     # Pinecone Configuration
@@ -59,9 +59,9 @@ class Settings(BaseSettings):
         return f"https://{self.r2_account_id}.r2.cloudflarestorage.com"
 
     # RAG Configuration
-    rag_top_k: int = 4  # Number of documents to retrieve
+    rag_top_k: int = 3  # Number of documents to retrieve
     rag_batch_concurrency: int = 1  # Concurrent summarization requests (reduced for rate limit)
-    rag_similarity_threshold: float = 0.7  # Minimum similarity score for relevant documents (0.0-1.0)
+    rag_similarity_threshold: float = 0.6  # Minimum similarity score for relevant documents (0.0-1.0)
     rag_enable_authorization_check: bool = True  # Enable double-check for authorization rejections
 
     # Redis Configuration (for persistent docstore)
