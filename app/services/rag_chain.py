@@ -260,7 +260,7 @@ ATURAN KETAT:
 2. JANGAN gunakan pengetahuan umum Anda di luar konteks
 3. Jika konteks tidak cukup untuk menjawab pertanyaan, katakan: "Maaf, saya tidak menemukan informasi yang cukup dalam knowledge base untuk menjawab pertanyaan ini."
 4. JANGAN pernah berimajinasi atau menebak jawaban
-5. Jika pertanyaan merujuk ke percakapan sebelumnya (menggunakan kata seperti 'itu', 'tersebut', 'ini'), gunakan riwayat chat untuk memahami yang dimaksud pengguna."""
+5. PENTING: Jika pertanyaan menggunakan kata ganti seperti 'ini', 'itu', 'tersebut', 'dia', 'mereka', Anda HARUS lihat riwayat percakapan untuk memahami referensinya. Ini BUKAN berimajinasi, ini menggunakan konteks percakapan yang valid."""
                     )
 
         # Build prompt content with context
@@ -269,7 +269,8 @@ ATURAN KETAT:
 
 Pertanyaan saat ini: {question}
 
-Jika informasi di atas dan riwayat percakapan cukup untuk menjawab, berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia.
+CATATAN: Jika pertanyaan di atas mengandung kata ganti (ini/itu/tersebut/dia/mereka), lihat riwayat percakapan untuk memahami referensinya.
+Jika informasi dari konteks knowledge base DAN riwayat percakapan cukup untuk menjawab, berikan jawaban yang jelas dan ringkas dalam bahasa Indonesia.
 Jika TIDAK cukup, gunakan kalimat penolakan sesuai aturan nomor 3."""
 
         prompt_content = [{"type": "text", "text": prompt_text}]
