@@ -175,3 +175,44 @@ async def deactivate_user(db: AsyncSession, user_id: str) -> Optional[User]:
 
     logger.info(f"Deactivated user: {user.username}")
     return user
+
+
+async def delete_user(db: AsyncSession, user_id: str) -> Optional[User]:
+    """
+    Delete a user from the database.
+
+    Args:
+        db: Database session.
+        user_id: User ID (UUID string).
+
+    Returns:
+        Deleted User object if found, None otherwise.
+
+    Raises:
+        AuthenticationError: If attempting to delete the last SUPER_ADMIN.
+    """
+    user = await get_user_by_id(db, user_id)
+    if not user:
+        return None
+
+    # Prevent deleting the last SUPER_ADMIN
+    if user.role == UserRole.SUPER_ADMIN:
+        result = await db.execute(
+            select(User).where(User.role == UserRole.SUPER_ADMIN)
+        )
+        super_admins = result.scalars().all()
+
+        if len(super_admins) <= 1:
+            msg = "Cannot delete the last SUPER_ADMIN user"
+            logger.error(msg)
+            raise AuthenticationError(msg)
+
+    # Store user info before deletion
+    username = user.username
+
+    # Delete user (API keys will be cascade deleted due to ondelete="CASCADE")
+    await db.delete(user)
+    await db.commit()
+
+    logger.info(f"Deleted user: {username} (ID: {user_id})")
+    return user

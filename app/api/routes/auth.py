@@ -85,7 +85,7 @@ async def login(
     "/register",
     response_model=UserResponse,
     tags=["auth"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
@@ -98,35 +98,61 @@ async def register(
     request: Request,
     register_req: RegisterRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
 ) -> UserResponse:
     """
-    Register a new user (Admin only).
+    Register a new user (Super Admin or Admin).
 
-    Creates a new user account. Only accessible by admin users.
+    Creates a new user account with role-based restrictions:
+    - **Super Admin**: Can create any role (super_admin, admin, lecturer, student)
+    - **Admin**: Can only create lecturer and student roles
 
     Args:
         request: User registration data.
         db: Database session.
-        current_user: Current authenticated admin user.
+        current_user: Current authenticated super admin or admin user.
 
     Returns:
         UserResponse with created user information.
 
     Raises:
-        HTTPException: If username/email exists or validation fails.
+        HTTPException: If username/email exists, validation fails, or insufficient permissions.
     """
     try:
-        logger.info(f"Registration attempt for username: {register_req.username}")
+        logger.info(f"Registration attempt for username: {register_req.username} by {current_user.username} (role: {current_user.role})")
 
         # Validate role
         try:
-            role = UserRole(register_req.role.lower())
+            requested_role = UserRole(register_req.role.upper())
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid role: {register_req.role}. Must be: admin, lecturer, or student",
+                detail=f"Invalid role: {register_req.role}. Must be: SUPER_ADMIN, ADMIN, LECTURER, or STUDENT (case-insensitive)",
             )
+
+        # Validate role creation permissions
+        if current_user.role == UserRole.SUPER_ADMIN:
+            # Super Admin can create any role
+            logger.info(f"Super Admin {current_user.username} creating user with role: {requested_role.value}")
+        elif current_user.role == UserRole.ADMIN:
+            # Admin can only create LECTURER and STUDENT
+            if requested_role in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+                logger.warning(
+                    f"Admin {current_user.username} attempted to create {requested_role.value} user - DENIED"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Admin cannot create Super Admin or Admin users. Contact Super Admin for assistance.",
+                )
+            logger.info(f"Admin {current_user.username} creating user with role: {requested_role.value}")
+        else:
+            # Should not reach here due to dependency check, but defensive programming
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions to create users",
+            )
+
+        role = requested_role
 
         # Create user
         user = await register_user(

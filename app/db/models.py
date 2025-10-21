@@ -16,9 +16,10 @@ from app.db.database import Base
 class UserRole(str, enum.Enum):
     """User role enumeration for access control."""
 
-    ADMIN = "admin"
-    LECTURER = "lecturer"
-    STUDENT = "student"
+    SUPER_ADMIN = "SUPER_ADMIN"
+    ADMIN = "ADMIN"
+    LECTURER = "LECTURER"
+    STUDENT = "STUDENT"
 
 
 class User(Base):

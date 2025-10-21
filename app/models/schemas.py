@@ -157,7 +157,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(..., description="Email address")
     password: str = Field(..., min_length=6, description="Password (min 6 characters)")
     full_name: str = Field(..., min_length=1, max_length=255, description="Full name")
-    role: Optional[str] = Field(default="student", description="User role (admin, lecturer, student)")
+    role: Optional[str] = Field(default="STUDENT", description="User role (SUPER_ADMIN, ADMIN, LECTURER, STUDENT)")
 
 
 class TokenResponse(BaseModel):
@@ -220,3 +220,46 @@ class UserListResponse(BaseModel):
 
     total: int = Field(..., description="Total matched users")
     users: List[UserResponse] = Field(..., description="Users page items")
+
+
+class DeleteUserResponse(BaseModel):
+    """Response schema for deleting a user."""
+
+    success: bool = Field(..., description="Whether deletion was successful")
+    message: str = Field(..., description="Status message")
+    deleted_user: Optional[UserResponse] = Field(default=None, description="Deleted user information")
+
+
+class DocumentEnrichmentMetadata(BaseModel):
+    """Schema for enriched document metadata."""
+
+    category: Optional[str] = Field(
+        None,
+        description="Document category (vpn, network, email, hardware, software, other)"
+    )
+    subcategory: Optional[str] = Field(
+        None,
+        description="Subcategory (installation, troubleshooting, configuration, how-to)"
+    )
+    keywords: Optional[List[str]] = Field(
+        None,
+        description="3-5 keywords describing the document content",
+        max_length=10
+    )
+    faq_questions: Optional[List[str]] = Field(
+        None,
+        description="2-5 common questions this document answers",
+        max_length=10
+    )
+    platform: Optional[str] = Field(
+        None,
+        description="Target platform (windows, mac, linux, android, ios, all)"
+    )
+    problem_type: Optional[str] = Field(
+        None,
+        description="Type of content (installation, error, configuration, guide, reference)"
+    )
+    difficulty_level: Optional[str] = Field(
+        None,
+        description="Difficulty level (beginner, intermediate, advanced)"
+    )

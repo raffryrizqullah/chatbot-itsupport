@@ -13,6 +13,7 @@ from app.services.pdf_processor import PDFProcessor
 from app.services.summarizer import SummarizerService
 from app.services.vectorstore import VectorStoreService
 from app.services.r2_storage import R2StorageService
+from app.services.metadata_extractor import MetadataExtractorService
 from app.utils.strings import to_document_name
 from app.core.config import settings
 from app.core.dependencies import require_role
@@ -50,6 +51,12 @@ def get_vectorstore() -> VectorStoreService:
 def get_r2_storage() -> R2StorageService:
     """Get or create R2 storage service instance (cached)."""
     return R2StorageService()
+
+
+@lru_cache()
+def get_metadata_extractor() -> MetadataExtractorService:
+    """Get or create metadata extractor service instance (cached)."""
+    return MetadataExtractorService()
 
 
 def _validate_upload_request(
@@ -114,6 +121,8 @@ async def _process_single_file(
     summarizer: SummarizerService,
     vectorstore: VectorStoreService,
     r2_storage: R2StorageService,
+    auto_extract: bool = False,
+    metadata_extractor: Optional[MetadataExtractorService] = None,
 ) -> UploadResponse:
     """
     Process a single uploaded PDF file.
@@ -174,6 +183,39 @@ async def _process_single_file(
     table_summaries = summarizer.summarize_tables(extracted_content.tables)
     image_summaries = summarizer.summarize_images(extracted_content.images)
 
+    # Auto-extract metadata if requested and no manual metadata provided
+    if auto_extract and metadata_extractor:
+        # Check if enrichment fields are already provided
+        has_manual_enrichment = any(
+            key in (metadata_dict or {})
+            for key in ["category", "keywords", "faq_questions", "platform"]
+        )
+
+        if not has_manual_enrichment:
+            logger.info("Auto-extracting metadata using LLM...")
+            # Combine first 5 text chunks for extraction
+            combined_text = "\n\n".join(
+                [chunk.text for chunk in extracted_content.texts[:5] if hasattr(chunk, "text")]
+            )
+
+            if combined_text:
+                try:
+                    auto_metadata = await metadata_extractor.extract_metadata(combined_text)
+                    if auto_metadata:
+                        logger.info(f"Auto-extracted metadata: {auto_metadata}")
+                        # Merge auto-extracted with existing metadata
+                        if metadata_dict is None:
+                            metadata_dict = {}
+                        # Only add auto-extracted fields that don't exist
+                        for key, value in auto_metadata.items():
+                            if key not in metadata_dict and value:
+                                metadata_dict[key] = value
+                except Exception as e:
+                    logger.error(f"Auto-extraction failed: {str(e)}")
+                    # Continue without auto-extracted metadata
+        else:
+            logger.info("Manual enrichment metadata provided, skipping auto-extraction")
+
     # Add to vector store with source_link and custom_metadata
     # Ensure document_name stored in metadata for listing (auto-generated per file)
     enriched_metadata = dict(metadata_dict or {})
@@ -218,7 +260,7 @@ async def _process_single_file(
     response_model=Union[UploadResponse, BatchUploadResponse],
     status_code=status.HTTP_201_CREATED,
     tags=["documents"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
@@ -232,7 +274,16 @@ async def upload_document(
     files: List[UploadFile] = File(...),
     source_links: Optional[List[str]] = Form(None),
     custom_metadata: Optional[str] = Form(None),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    # Enrichment metadata fields (optional)
+    category: Optional[str] = Form(None),
+    subcategory: Optional[str] = Form(None),
+    keywords: Optional[str] = Form(None),
+    faq_questions: Optional[str] = Form(None),
+    platform: Optional[str] = Form(None),
+    problem_type: Optional[str] = Form(None),
+    difficulty_level: Optional[str] = Form(None),
+    auto_extract_metadata: bool = Form(False),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
 ) -> Union[UploadResponse, BatchUploadResponse]:
     """
     Upload and process one or more PDF documents (Admin only).
@@ -240,12 +291,30 @@ async def upload_document(
     Extracts text, tables, and images from PDFs, generates summaries,
     and stores them in the vector database for retrieval.
 
+    **Metadata Enrichment (Optional)**:
+    - category: Document category (vpn, network, email, hardware, software, other)
+    - subcategory: Subcategory (installation, troubleshooting, configuration, how-to)
+    - keywords: 3-5 keywords (JSON array or comma-separated)
+    - faq_questions: Common questions this doc answers (JSON array or newline-separated)
+    - platform: Target platform (windows, mac, linux, android, ios, all)
+    - problem_type: Content type (installation, error, configuration, guide, reference)
+    - difficulty_level: Difficulty level (beginner, intermediate, advanced)
+    - auto_extract_metadata: Use LLM to auto-extract metadata (default: False, costs ~$0.008/doc)
+
     Requires admin authentication via Bearer token.
 
     Args:
         files: One or more PDF files to upload and process.
         source_links: Optional source links for each file (must match number of files).
         custom_metadata: Optional custom metadata as JSON string (applies to all files).
+        category: Document category for filtering.
+        subcategory: Document subcategory.
+        keywords: Keywords for search boost (JSON array or comma-separated).
+        faq_questions: FAQ questions this document answers (JSON array or newline-separated).
+        platform: Target platform.
+        problem_type: Type of content.
+        difficulty_level: Difficulty level.
+        auto_extract_metadata: Enable LLM-based metadata extraction.
         current_user: Current authenticated admin user.
 
     Returns:
@@ -257,11 +326,52 @@ async def upload_document(
     # Validate request parameters
     metadata_dict = _validate_upload_request(files, source_links, custom_metadata)
 
+    # Parse enrichment metadata
+    enrichment_metadata = {}
+
+    if category:
+        enrichment_metadata["category"] = category
+    if subcategory:
+        enrichment_metadata["subcategory"] = subcategory
+    if platform:
+        enrichment_metadata["platform"] = platform
+    if problem_type:
+        enrichment_metadata["problem_type"] = problem_type
+    if difficulty_level:
+        enrichment_metadata["difficulty_level"] = difficulty_level
+
+    # Parse keywords (accept JSON array or comma-separated)
+    if keywords:
+        try:
+            enrichment_metadata["keywords"] = json.loads(keywords)
+        except json.JSONDecodeError:
+            # Fallback: comma-separated string
+            enrichment_metadata["keywords"] = [k.strip() for k in keywords.split(",") if k.strip()]
+
+    # Parse FAQ questions (accept JSON array or newline-separated)
+    if faq_questions:
+        try:
+            enrichment_metadata["faq_questions"] = json.loads(faq_questions)
+        except json.JSONDecodeError:
+            # Fallback: newline-separated string
+            enrichment_metadata["faq_questions"] = [
+                q.strip() for q in faq_questions.split("\n") if q.strip()
+            ]
+
+    # Merge enrichment metadata with custom_metadata
+    if metadata_dict is None:
+        metadata_dict = {}
+    metadata_dict.update(enrichment_metadata)
+
+    if enrichment_metadata:
+        logger.info(f"Document enrichment metadata: {enrichment_metadata}")
+
     # Get service instances
     pdf_processor = get_pdf_processor()
     summarizer = get_summarizer()
     vectorstore = get_vectorstore()
     r2_storage = get_r2_storage()
+    metadata_extractor = get_metadata_extractor() if auto_extract_metadata else None
 
     results = []
     successful = 0
@@ -280,6 +390,8 @@ async def upload_document(
                 summarizer=summarizer,
                 vectorstore=vectorstore,
                 r2_storage=r2_storage,
+                auto_extract=auto_extract_metadata,
+                metadata_extractor=metadata_extractor,
             )
             results.append(result)
             successful += 1
@@ -335,7 +447,7 @@ async def upload_document(
     "/documents/list",
     response_model=DocumentListResponse,
     tags=["documents"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},

@@ -16,6 +16,13 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.core.config import settings
 from app.core.exceptions import RAGChainError
 from app.services.vectorstore import VectorStoreService
+from app.services.hybrid_search import HybridSearchService
+from app.services.prompts import (
+    get_query_routing_prompt,
+    get_answer_generation_prompt,
+    get_greeting_response,
+    get_no_documents_response,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,6 +44,7 @@ class LangGraphRAGService:
         vectorstore: Optional[VectorStoreService] = None,
         *,
         enable_memory: bool = True,
+        enable_hybrid_search: bool = True,
     ) -> None:
         """
         Initialize LangGraph RAG service.
@@ -44,8 +52,10 @@ class LangGraphRAGService:
         Args:
             vectorstore: VectorStoreService instance for document retrieval.
             enable_memory: Whether to enable conversation memory (default: True).
+            enable_hybrid_search: Whether to enable hybrid search (vector + BM25) (default: True).
         """
         self.vectorstore = vectorstore or VectorStoreService()
+        self.hybrid_search = HybridSearchService() if enable_hybrid_search else None
         self.llm = ChatOpenAI(
             model=settings.openai_model,
             temperature=settings.openai_temperature,
@@ -60,7 +70,10 @@ class LangGraphRAGService:
 
         # Build the graph
         self.graph = self._build_graph(enable_memory=enable_memory)
-        logger.info("LangGraph RAG service initialized successfully")
+        logger.info(
+            f"LangGraph RAG service initialized successfully "
+            f"(hybrid_search={'enabled' if enable_hybrid_search else 'disabled'})"
+        )
 
     def _is_pure_greeting(self, query: str) -> bool:
         """
@@ -342,6 +355,69 @@ class LangGraphRAGService:
                     include_scores=True,
                 )
 
+                # NEW: Boost documents with FAQ question matches
+                query_lower = query.lower()
+                for doc in summary_docs:
+                    faq_questions = doc.metadata.get("faq_questions", [])
+                    if faq_questions:
+                        for faq in faq_questions:
+                            # Simple similarity: check if query contains FAQ words
+                            faq_lower = faq.lower()
+                            # Count matching words
+                            query_words = set(query_lower.split())
+                            faq_words = set(faq_lower.split())
+                            match_ratio = len(query_words & faq_words) / max(len(query_words), 1)
+
+                            if match_ratio > 0.6:  # 60% word overlap
+                                # Boost this document's score
+                                current_score = doc.metadata.get("similarity_score", 0.0)
+                                doc.metadata["similarity_score"] = min(current_score + 0.15, 1.0)
+                                doc.metadata["faq_boosted"] = True
+                                logger.info(
+                                    f"FAQ boost applied: query='{query[:30]}...' matched FAQ='{faq[:50]}...'"
+                                )
+                                break  # Only boost once per doc
+
+                # Re-sort by boosted scores
+                boosted_pairs = sorted(
+                    zip(retrieved_docs, summary_docs),
+                    key=lambda x: x[1].metadata.get("similarity_score", 0.0),
+                    reverse=True
+                )
+                retrieved_docs = [doc for doc, _ in boosted_pairs]
+                summary_docs = [doc for _, doc in boosted_pairs]
+
+                # Apply hybrid search (vector + BM25) if enabled
+                if self.hybrid_search and summary_docs:
+                    logger.info("Applying hybrid search re-ranking...")
+                    vector_scores = [
+                        doc.metadata.get("similarity_score", 0.0)
+                        for doc in summary_docs
+                    ]
+
+                    # Hybrid re-ranking (vector + BM25)
+                    summary_docs, hybrid_scores = self.hybrid_search.rerank_with_keywords(
+                        query=query,
+                        documents=summary_docs,
+                        vector_scores=vector_scores
+                    )
+
+                    # Metadata-based boost (keywords, category, platform)
+                    summary_docs, final_scores = self.hybrid_search.boost_by_metadata(
+                        query=query,
+                        documents=summary_docs,
+                        scores=hybrid_scores
+                    )
+
+                    # Update scores in metadata
+                    for doc, score in zip(summary_docs, final_scores):
+                        doc.metadata["similarity_score"] = score
+                        doc.metadata["hybrid_search_applied"] = True
+
+                    # Re-pair with retrieved_docs (maintain same order)
+                    # Note: retrieved_docs order should match summary_docs
+                    retrieved_docs = retrieved_docs[:len(summary_docs)]
+
                 # Check if empty result is due to authorization restrictions
                 if not retrieved_docs:
                     logger.warning("No documents retrieved for query")
@@ -444,23 +520,12 @@ class LangGraphRAGService:
             # Pre-filter: Check for pure greetings (fast path, no LLM call)
             if self._is_pure_greeting(user_query):
                 logger.info(f"Pure greeting detected, responding directly: {user_query[:50]}...")
-                greeting_response = AIMessage(content=(
-                    "Halo! Saya asisten IT support. Ada yang bisa saya bantu hari ini?"
-                ))
+                greeting_response = AIMessage(content=get_greeting_response())
                 return {"messages": [greeting_response]}
 
             # For all non-greeting questions: Use LLM with strict knowledge base enforcement
             logger.info(f"Question detected, enforcing knowledge base search: {user_query[:50]}...")
-            strict_instruction = SystemMessage(content=(
-                "You are an IT support assistant with STRICT knowledge base boundaries.\n\n"
-                "CRITICAL RULES:\n"
-                "1. For ANY question (not just IT-related) → YOU MUST use the retrieve tool FIRST\n"
-                "2. NEVER respond from your general knowledge without checking knowledge base\n"
-                "3. After retrieve tool returns results:\n"
-                "   - If results found → Use them to answer\n"
-                "   - If 'No relevant documents found' → You will be told to say you don't know\n\n"
-                "Your ONLY job is to search the knowledge base. DO NOT use external knowledge."
-            ))
+            strict_instruction = SystemMessage(content=get_query_routing_prompt())
 
             # Prepend instruction to conversation messages
             messages_with_instruction = [strict_instruction] + state["messages"]
@@ -507,30 +572,17 @@ class LangGraphRAGService:
             # If no documents found in knowledge base, return "tidak tahu" response
             if not docs_content or "No relevant documents found" in docs_content:
                 logger.info("No documents found in knowledge base, responding with 'tidak tahu'")
-                no_knowledge_response = AIMessage(content=(
-                    "Maaf, saya tidak memiliki informasi tentang itu dalam knowledge base saya. "
-                    "Saya hanya bisa menjawab pertanyaan terkait IT support yang ada di sistem kami."
-                ))
+                no_knowledge_response = AIMessage(content=get_no_documents_response())
                 return {"messages": [no_knowledge_response]}
 
-            # STRICT system prompt - knowledge base boundaries
-            system_message_content = (
-                "Anda adalah asisten IT support yang HANYA menjawab berdasarkan konteks yang diberikan.\n\n"
-                "ATURAN KETAT:\n"
-                "1. HANYA gunakan informasi dari konteks knowledge base di bawah ini\n"
-                "2. JANGAN gunakan pengetahuan umum Anda di luar konteks\n"
-                "3. Jika konteks tidak cukup untuk menjawab pertanyaan, katakan dengan jelas: "
-                '"Maaf, saya tidak menemukan informasi yang cukup dalam knowledge base untuk menjawab pertanyaan ini."\n'
-                "4. JANGAN pernah berimajinasi atau menebak jawaban\n"
-                "5. Berikan jawaban yang jelas, ringkas, dan dalam bahasa Indonesia\n"
-                "6. Format jawaban:\n"
-                "   - Gunakan **bold** untuk poin penting\n"
-                "   - Gunakan `code` untuk command/kode\n"
-                "   - Gunakan bullet points (-) untuk list\n"
-                "   - Gunakan \n\n untuk pisah paragraf\n"
-                "   - Tampilkan URL dengan format: [Teks](URL)\n"
-                "7. Maksimal 3-4 kalimat kecuali pertanyaan membutuhkan detail lebih\n\n"
-                f"Konteks dari knowledge base:\n{docs_content}"
+            # Detect user role for role-based prompt adaptation
+            current_user_role = self._detect_user_role()
+            logger.info(f"Generating answer for user role: {current_user_role}")
+
+            # Get improved system prompt with few-shot examples
+            system_message_content = get_answer_generation_prompt(
+                docs_content=docs_content,
+                user_role=current_user_role
             )
 
             # Filter conversation messages (exclude tool-related messages)
@@ -611,6 +663,9 @@ class LangGraphRAGService:
             # Set metadata filter for this query (used by retrieve tool)
             self._current_metadata_filter = metadata_filter
 
+            # Reset retrieved metadata to prevent leaking data from previous queries
+            self._retrieved_metadata = {}
+
             # Prepare config with thread_id for memory
             config = {"configurable": {"thread_id": thread_id}} if thread_id else None
 
@@ -666,6 +721,115 @@ class LangGraphRAGService:
 
         except Exception as e:
             msg = f"LangGraph query failed: {str(e)}"
+            logger.error(msg)
+            raise RAGChainError(msg)
+
+    async def query_stream(
+        self,
+        question: str,
+        *,
+        thread_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Stream query responses token by token from the RAG system.
+
+        Yields LLM tokens as they are generated, followed by final metadata.
+        Uses LangGraph's stream_mode="messages" for real-time token streaming.
+
+        Args:
+            question: User's question.
+            thread_id: Optional conversation thread ID for memory persistence.
+            metadata_filter: Optional metadata filter for role-based access control.
+
+        Yields:
+            Dict with either:
+            - {"type": "token", "content": str, "done": False} for LLM tokens
+            - {"type": "metadata", "metadata": dict, "done": True} for final metadata
+
+        Raises:
+            RAGChainError: If streaming fails.
+        """
+        try:
+            logger.info(f"Starting streaming query: {question[:50]}...")
+
+            # Set metadata filter for this query
+            self._current_metadata_filter = metadata_filter
+
+            # Reset retrieved metadata to prevent leaking data from previous queries
+            self._retrieved_metadata = {}
+
+            # Prepare config with thread_id for memory
+            config = {"configurable": {"thread_id": thread_id}} if thread_id else None
+
+            # Track if we've yielded any tokens
+            has_streamed_tokens = False
+            executed_nodes = []
+
+            # Stream LLM tokens using messages mode
+            async for chunk in self.graph.astream(
+                {"messages": [{"role": "user", "content": question}]},
+                stream_mode="messages",
+                config=config,
+            ):
+                # chunk is a tuple: (message_chunk, metadata)
+                message_chunk, chunk_metadata = chunk
+
+                # Only stream tokens from the "generate" node
+                # This avoids streaming from query_or_respond node's tool calls
+                if chunk_metadata.get("langgraph_node") == "generate":
+                    if hasattr(message_chunk, "content") and message_chunk.content:
+                        has_streamed_tokens = True
+                        yield {
+                            "type": "token",
+                            "content": message_chunk.content,
+                            "done": False,
+                        }
+
+                # Track executed nodes for metadata
+                node_name = chunk_metadata.get("langgraph_node")
+                if node_name and node_name not in executed_nodes:
+                    executed_nodes.append(node_name)
+
+            # If no tokens were streamed (e.g., pure greeting), get the final answer
+            if not has_streamed_tokens:
+                logger.info("No tokens streamed, retrieving final state...")
+                final_state = self.graph.get_state(config)
+                if final_state and final_state.values:
+                    messages = final_state.values.get("messages", [])
+                    if messages:
+                        final_message = messages[-1]
+                        if hasattr(final_message, "content"):
+                            yield {
+                                "type": "token",
+                                "content": final_message.content,
+                                "done": False,
+                            }
+
+            # Build and yield final metadata
+            metadata = {
+                "thread_id": thread_id,
+                "used_tools": any(
+                    node in executed_nodes for node in ["tools"]
+                ),
+                "langgraph_enabled": True,
+                "executed_node_types": executed_nodes,
+            }
+
+            # Add retrieved documents metadata if tools were used
+            if self._retrieved_metadata:
+                metadata.update(self._retrieved_metadata)
+
+            yield {
+                "type": "metadata",
+                "metadata": metadata,
+                "done": True,
+            }
+
+            logger.info("Streaming query completed successfully")
+
+        except Exception as e:
+            msg = f"LangGraph streaming query failed: {str(e)}"
             logger.error(msg)
             raise RAGChainError(msg)
 

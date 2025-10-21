@@ -7,7 +7,9 @@ Handles user queries against indexed documents using retrieval-augmented generat
 from typing import Union, Optional, Dict, Any, List
 from functools import lru_cache
 import uuid
+import json
 from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi.responses import StreamingResponse
 from app.models.schemas import (
     QueryRequest,
     QueryResponse,
@@ -191,6 +193,129 @@ async def query_documents(
 
     except Exception as e:
         msg = f"Query processing failed: {str(e)}"
+        logger.error(msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=msg,
+        )
+
+
+@router.post(
+    "/query/stream",
+    tags=["query"],
+    responses={
+        400: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+@limiter.limit(RATE_LIMITS["query"])
+async def query_documents_stream(
+    request: Request,
+    query_req: QueryRequest,
+    current_user: Optional[User] = Depends(get_current_user_flexible),
+):
+    """
+    Query indexed documents with streaming token-by-token response.
+
+    Streams LLM-generated answers in real-time, providing a better user experience
+    similar to ChatGPT or Claude AI. The response is sent as Server-Sent Events (SSE).
+
+    **Response Format:**
+    - **Token chunks**: `data: {"type": "token", "content": "...", "done": false}`
+    - **Final metadata**: `data: {"type": "metadata", "metadata": {...}, "done": true}`
+
+    **Authentication**: Supports both JWT token and API key.
+    - **JWT Token**: `Authorization: Bearer <token>`
+    - **API Key**: `X-API-Key: sk-proj-xxxxx`
+
+    **Role-Based Data Access**:
+    - Anonymous/Student: Public data only
+    - Lecturer: Public + Internal data
+    - Admin: All data
+
+    Args:
+        request: FastAPI request object.
+        query_req: Query request with question and optional parameters.
+        current_user: Current authenticated user (optional, supports JWT or API key).
+
+    Returns:
+        StreamingResponse with Server-Sent Events (SSE) containing tokens and metadata.
+
+    Raises:
+        HTTPException: If streaming fails.
+    """
+    try:
+        logger.info(f"Processing streaming query (LangGraph): {query_req.question[:50]}...")
+
+        # Get or generate session_id for conversation tracking
+        session_id = query_req.session_id or f"anon_{uuid.uuid4()}"
+        logger.info(f"Using session_id: {session_id}")
+
+        # Get service instances
+        langgraph_rag = get_langgraph_rag()
+        chat_memory = get_chat_memory()
+
+        # Build metadata filter based on user role for RBAC
+        metadata_filter = build_metadata_filter(current_user)
+        if current_user:
+            logger.info(f"User {current_user.username} ({current_user.role}) - Filter: {metadata_filter}")
+        else:
+            logger.info(f"Anonymous user - Filter: {metadata_filter}")
+
+        # Define async generator for Server-Sent Events
+        async def generate_sse():
+            """Generate Server-Sent Events for streaming response."""
+            final_answer = ""
+            final_metadata = None
+
+            try:
+                # Stream tokens from LangGraph RAG service
+                async for chunk in langgraph_rag.query_stream(
+                    question=query_req.question,
+                    thread_id=session_id,
+                    metadata_filter=metadata_filter,
+                ):
+                    if chunk["type"] == "token":
+                        # Accumulate answer for chat memory
+                        final_answer += chunk["content"]
+                        # Send token to frontend
+                        yield f"data: {json.dumps(chunk)}\n\n"
+
+                    elif chunk["type"] == "metadata":
+                        final_metadata = chunk["metadata"]
+                        # Add session_id to metadata
+                        final_metadata["session_id"] = session_id
+                        # Send final metadata
+                        yield f"data: {json.dumps(chunk)}\n\n"
+
+                # Save to Redis chat memory for backward compatibility
+                if final_answer:
+                    chat_memory.add_exchange(session_id, query_req.question, final_answer)
+                    logger.info(f"Saved conversation exchange to session {session_id}")
+
+            except Exception as e:
+                # Send error as SSE
+                error_chunk = {
+                    "type": "error",
+                    "error": str(e),
+                    "done": True,
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+                logger.error(f"Streaming error: {str(e)}")
+
+        return StreamingResponse(
+            generate_sse(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable buffering in nginx
+            },
+        )
+
+    except Exception as e:
+        msg = f"Streaming query processing failed: {str(e)}"
         logger.error(msg)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -62,7 +62,7 @@ class SessionListResponse(BaseModel):
     "/sessions",
     response_model=SessionListResponse,
     tags=["chat"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         429: {"model": ErrorResponse},
         500: {"model": ErrorResponse},

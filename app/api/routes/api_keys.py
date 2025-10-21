@@ -16,9 +16,11 @@ from app.models.schemas import (
     APIKeyListResponse,
     UserListResponse,
     UserResponse,
+    DeleteUserResponse,
     ErrorResponse,
 )
 from app.services import api_key as api_key_service
+from app.services import user as user_service
 from app.db.database import get_db
 from app.db.models import User, UserRole
 from app.core.dependencies import require_role
@@ -34,7 +36,7 @@ logger = logging.getLogger(__name__)
     response_model=APIKeyCreateResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["admin", "api-keys"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
@@ -47,7 +49,7 @@ async def create_api_key(
     request: Request,
     create_request: APIKeyCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
 ) -> APIKeyCreateResponse:
     """
     Create a new API key for a user (Admin only).
@@ -102,7 +104,7 @@ async def create_api_key(
     "/api-keys",
     response_model=APIKeyListResponse,
     tags=["admin", "api-keys"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         403: {"model": ErrorResponse},
         429: {"model": ErrorResponse},
@@ -114,7 +116,7 @@ async def list_api_keys(
     request: Request,
     user_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
 ) -> APIKeyListResponse:
     """
     List all API keys (Admin only).
@@ -167,7 +169,7 @@ async def list_api_keys(
     "/api-keys/{key_id}",
     response_model=APIKeyResponse,
     tags=["admin", "api-keys"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
@@ -180,7 +182,7 @@ async def get_api_key(
     request: Request,
     key_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
 ) -> APIKeyResponse:
     """
     Get API key details (Admin only).
@@ -233,7 +235,7 @@ async def get_api_key(
     "/api-keys/{key_id}",
     status_code=status.HTTP_200_OK,
     tags=["admin", "api-keys"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
@@ -246,7 +248,7 @@ async def revoke_api_key(
     request: Request,
     key_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
 ) -> dict:
     """
     Revoke (deactivate) an API key (Admin only).
@@ -297,7 +299,7 @@ async def revoke_api_key(
     "/users/{user_id}/api-keys",
     response_model=APIKeyListResponse,
     tags=["admin", "api-keys"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         403: {"model": ErrorResponse},
         429: {"model": ErrorResponse},
@@ -309,7 +311,7 @@ async def list_user_api_keys(
     request: Request,
     user_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
 ) -> APIKeyListResponse:
     """
     List API keys for a specific user (Admin only).
@@ -364,7 +366,7 @@ async def list_user_api_keys(
     "/users",
     response_model=UserListResponse,
     tags=["admin", "users"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN))],
     responses={
         403: {"model": ErrorResponse},
         429: {"model": ErrorResponse},
@@ -375,7 +377,7 @@ async def list_user_api_keys(
 async def list_users(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     search: Optional[str] = Query(None, description="Search by username/email/full_name (case-insensitive)"),
     role: Optional[str] = Query(None, description="Filter by role: admin|lecturer|student"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
@@ -467,3 +469,93 @@ async def list_users(
         msg = f"Failed to list users: {str(e)}"
         logger.error(msg)
         raise HTTPException(status_code=500, detail=msg)
+
+
+@router.delete(
+    "/users/{user_id}",
+    response_model=DeleteUserResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["admin", "users"],
+    dependencies=[Depends(require_role(UserRole.SUPER_ADMIN))],
+    responses={
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+@limiter.limit(RATE_LIMITS["default"])
+async def delete_user(
+    request: Request,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)),
+) -> DeleteUserResponse:
+    """
+    Delete a user from the system (Super Admin only).
+
+    Permanently deletes a user and their associated API keys from the database.
+
+    **Restrictions:**
+    - Only SUPER_ADMIN can delete users (ADMIN cannot)
+    - Cannot delete yourself
+    - Cannot delete the last SUPER_ADMIN user
+
+    Args:
+        user_id: User ID (UUID string) to delete.
+        db: Database session.
+        current_user: Current authenticated super admin user.
+
+    Returns:
+        DeleteUserResponse with deletion status and deleted user info.
+
+    Raises:
+        HTTPException: If user not found, forbidden, or deletion fails.
+    """
+    try:
+        # Prevent super admin from deleting themselves
+        if str(current_user.id) == user_id:
+            logger.warning(
+                f"Super Admin {current_user.username} attempted to delete themselves - DENIED"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot delete your own account. Contact another Super Admin.",
+            )
+
+        # Delete user (will raise AuthenticationError if last SUPER_ADMIN)
+        deleted_user = await user_service.delete_user(db=db, user_id=user_id)
+
+        if not deleted_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User {user_id} not found",
+            )
+
+        logger.info(
+            f"Super Admin {current_user.username} deleted user {deleted_user.username} (ID: {user_id})"
+        )
+
+        return DeleteUserResponse(
+            success=True,
+            message=f"User '{deleted_user.username}' deleted successfully",
+            deleted_user=UserResponse(
+                id=str(deleted_user.id),
+                username=deleted_user.username,
+                email=deleted_user.email,
+                full_name=deleted_user.full_name,
+                role=deleted_user.role.value,
+                is_active=deleted_user.is_active,
+                created_at=deleted_user.created_at,
+            ),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = f"Failed to delete user: {str(e)}"
+        logger.error(msg)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=msg,
+        )
